@@ -1,7 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
-import { db } from './firebase';
-import { collection, query, orderBy, limit, getDocs, where } from 'firebase/firestore';
 import { Bookmark, Share2, Mail, Heart, Music, X, ChevronUp, ChevronDown, ExternalLink, RefreshCw } from 'lucide-react';
 
 // Loading skeleton component
@@ -86,64 +84,92 @@ function App() {
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch articles from Firebase only
+  // Fetch articles from Firebase using REST API
   const fetchArticles = useCallback(async (genre: Genre = 'all') => {
     setLoading(true);
-    setArticles([]); // Clear articles while loading
+    setArticles([]);
     
     try {
-      let q;
-      if (genre === 'all') {
-        q = query(
-          collection(db, 'articles'),
-          orderBy('published_at', 'desc'),
-          limit(50)
-        );
-      } else {
-        q = query(
-          collection(db, 'articles'),
-          where('primary_genre', '==', genre),
-          orderBy('published_at', 'desc'),
-          limit(50)
-        );
+      // Use REST API directly to avoid Firestore client issues
+      const projectId = 'miny-ven';
+      const apiKey = 'AIzaSyCD7B4GDaRypsBGWODRyhxiGXnFUbAehfM';
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/articles?key=${apiKey}`;
+      
+      console.log('Fetching articles from REST API...');
+      const response = await fetch(url);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const querySnapshot = await getDocs(q);
-      const fetchedArticles: MusicNewsArticle[] = [];
+      const data = await response.json();
+      console.log('REST API response:', data);
       
-      querySnapshot.forEach((doc) => {
-        const data = doc.data();
-        fetchedArticles.push({
-          id: doc.id,
-          title: data.title,
-          summary: data.summary,
-          fullContent: data.full_content,
-          source: data.source,
-          sourceUrl: data.source_url,
-          primaryGenre: data.primary_genre,
-          secondaryGenres: data.secondary_genres || [],
-          artistNames: data.artist_names || [],
-          imageUrl: data.image_url,
-          publishedAt: new Date(data.published_at),
-          readTime: data.read_time || 60,
-          shareCount: data.share_count || 0,
-          emailCount: data.email_count || 0,
-          bookmarkCount: data.bookmark_count || 0,
-          viewCount: data.view_count || 0,
+      if (!data.documents) {
+        setArticles([]);
+        setToast('No articles found.');
+        setLoading(false);
+        return;
+      }
+      
+      const fetchedArticles: MusicNewsArticle[] = data.documents.map((doc: any) => {
+        const fields = doc.fields;
+        const docId = doc.name.split('/').pop();
+        
+        // Helper to get field value
+        const getField = (field: any) => {
+          if (!field) return null;
+          if (field.stringValue !== undefined) return field.stringValue;
+          if (field.integerValue !== undefined) return parseInt(field.integerValue);
+          if (field.doubleValue !== undefined) return field.doubleValue;
+          if (field.arrayValue) {
+            return (field.arrayValue.values || []).map((v: any) => v.stringValue || '');
+          }
+          return null;
+        };
+        
+        return {
+          id: docId,
+          title: getField(fields.title) || '',
+          summary: getField(fields.summary) || '',
+          fullContent: getField(fields.full_content) || '',
+          source: getField(fields.source) || '',
+          sourceUrl: getField(fields.source_url) || '',
+          primaryGenre: getField(fields.primary_genre) || '',
+          secondaryGenres: getField(fields.secondary_genres) || [],
+          artistNames: getField(fields.artist_names) || [],
+          imageUrl: getField(fields.image_url) || '',
+          publishedAt: new Date(getField(fields.published_at) || Date.now()),
+          readTime: getField(fields.read_time) || 60,
+          shareCount: getField(fields.share_count) || 0,
+          emailCount: getField(fields.email_count) || 0,
+          bookmarkCount: getField(fields.bookmark_count) || 0,
+          viewCount: getField(fields.view_count) || 0,
           isBookmarked: false
-        });
+        };
       });
       
-      setArticles(fetchedArticles);
-      console.log(`Loaded ${fetchedArticles.length} articles from Firebase`);
+      // Sort by published_at desc
+      fetchedArticles.sort((a: MusicNewsArticle, b: MusicNewsArticle) => 
+        b.publishedAt.getTime() - a.publishedAt.getTime()
+      );
       
-      if (fetchedArticles.length === 0) {
-        setToast('No articles found. Run the scraper to add content.');
+      // Filter by genre if needed
+      const filteredArticles = genre === 'all' 
+        ? fetchedArticles 
+        : fetchedArticles.filter((a: MusicNewsArticle) => a.primaryGenre === genre);
+      
+      setArticles(filteredArticles);
+      console.log(`Loaded ${filteredArticles.length} articles from REST API`);
+      
+      if (filteredArticles.length === 0) {
+        setToast('No articles found for this genre.');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching articles:', error);
+      console.error('Error message:', error.message);
       setArticles([]);
-      setToast('Error loading articles. Check Firebase configuration.');
+      setToast(`Error: ${error.message || 'Failed to load articles'}`);
     } finally {
       setLoading(false);
     }
@@ -444,33 +470,38 @@ function App() {
             <ArticleSkeleton />
           ) : (
             <div className="min-h-full flex flex-col p-4 sm:p-6">
-              {/* Genre Badge & Source */}
-              <div className="flex items-center justify-between mb-4">
-                <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] sm:text-xs font-bold uppercase tracking-wider bg-gradient-to-r ${
-                  genres.find(g => g.id === currentArticle.primaryGenre)?.gradient || 'from-gray-600 to-gray-500'
-                } text-white shadow-lg`}>
-                  {currentArticle.primaryGenre}
-                </span>
-                <span className="text-[10px] sm:text-xs text-white/40 font-medium">
-                  {currentArticle.source}
-                </span>
-              </div>
-
-              {/* Image with Gradient Overlay - Mobile Optimized */}
-              <div className="relative aspect-[4/3] sm:aspect-[16/10] mb-4 rounded-2xl sm:rounded-3xl overflow-hidden bg-gray-900 shadow-2xl card-hover group">
+              {/* Image with Gradient Overlay - Smaller size with tags */}
+              <div className="relative aspect-[16/9] mb-4 rounded-2xl sm:rounded-3xl overflow-hidden bg-gray-900 shadow-2xl card-hover group">
                 <img 
                   src={currentArticle.imageUrl} 
                   alt={currentArticle.title}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                   loading="lazy"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                <div className="absolute inset-0 bg-gradient-to-br from-black/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                
+                {/* Genre Badge & Source - positioned on image */}
+                <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r ${
+                    genres.find(g => g.id === currentArticle.primaryGenre)?.gradient || 'from-gray-600 to-gray-500'
+                  } text-white shadow-lg backdrop-blur-sm`}>
+                    {currentArticle.primaryGenre}
+                  </span>
+                  <span className="px-2.5 py-1 rounded-full text-[9px] sm:text-[10px] font-medium text-white/90 bg-black/40 backdrop-blur-sm">
+                    {currentArticle.source}
+                  </span>
+                </div>
               </div>
 
-              {/* Title - Mobile Optimized */}
-              <h2 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-3 leading-tight tracking-tight">
+              {/* Title - Clickable to bookmark */}
+              <h2 
+                onClick={() => toggleBookmark(currentArticle.id)}
+                className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-3 leading-tight tracking-tight cursor-pointer hover:text-white/80 transition-colors select-none"
+              >
                 {currentArticle.title}
+                {bookmarks.includes(currentArticle.id) && (
+                  <Bookmark className="inline-block w-5 h-5 ml-2 text-yellow-400 fill-yellow-400" />
+                )}
               </h2>
 
               {/* Summary - Mobile Optimized */}
