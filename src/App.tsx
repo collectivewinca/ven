@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
-import { Bookmark, Share2, Mail, Heart, Music, X, ChevronUp, ChevronDown, ExternalLink, RefreshCw, Smartphone, MessageSquare, Send } from 'lucide-react';
+import { Bookmark, Share2, Mail, Heart, Music, X, ChevronUp, ChevronDown, ExternalLink, RefreshCw, Smartphone, MessageSquare, Send, Menu } from 'lucide-react';
 
 // Loading skeleton component
 const ArticleSkeleton = () => (
@@ -74,6 +74,7 @@ function App() {
     return saved ? JSON.parse(saved) : [];
   });
   const [showBookmarks, setShowBookmarks] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<'up' | 'down' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -402,6 +403,11 @@ function App() {
       if (e.key === 'ArrowUp') handleSwipe('down');
       if (e.key === 'ArrowDown') handleSwipe('up');
       if (e.key === 'b') setShowBookmarks(prev => !prev);
+      if (e.key === 'Escape') {
+        setShowBookmarks(false);
+        setShowMenu(false);
+        setShowTextModal(false);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
@@ -447,31 +453,44 @@ function App() {
       {/* Premium Header - Mobile Optimized */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 glass z-50 border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2 sm:gap-3">
-          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-white/20 to-white/5 flex items-center justify-center">
-            <Music className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
+          <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 flex items-center justify-center overflow-hidden border border-white/20">
+            <img src="/branding/minylogo.png" alt="miny y0" className="w-7 h-7 sm:w-8 sm:h-8 object-contain" />
           </div>
           <div>
-            <h1 className="text-base sm:text-lg font-bold tracking-tight">miny-ven</h1>
-            <p className="text-[10px] sm:text-xs text-white/40">60-word music news</p>
+            <h1 className="text-base sm:text-lg font-bold tracking-tight">y0</h1>
+            <p className="text-[10px] sm:text-xs text-white/40">creator music intelligence</p>
           </div>
         </div>
-        
-        <button 
-          onClick={() => setShowBookmarks(true)}
-          className="relative group p-2.5 sm:p-3 rounded-full hover:bg-white/5 transition-all duration-300 btn-press min-w-[44px] min-h-[44px] flex items-center justify-center"
-          aria-label="View bookmarks"
-        >
-          <Bookmark className={`w-5 h-5 sm:w-6 sm:h-6 transition-all duration-300 ${
-            bookmarks.length > 0 
-              ? 'text-yellow-400 fill-yellow-400 scale-110' 
-              : 'text-white/60 group-hover:text-white'
-          }`} />
-          {bookmarks.length > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 text-white text-[9px] sm:text-[10px] font-bold rounded-full flex items-center justify-center animate-scale-in shadow-lg">
-              {bookmarks.length}
-            </span>
-          )}
-        </button>
+
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => {
+              setShowMenu(false);
+              setShowBookmarks(true);
+            }}
+            className="relative group p-2.5 sm:p-3 rounded-full hover:bg-white/5 transition-all duration-300 btn-press min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="View bookmarks"
+          >
+            <Bookmark className={`w-5 h-5 sm:w-6 sm:h-6 transition-all duration-300 ${
+              bookmarks.length > 0 
+                ? 'text-yellow-400 fill-yellow-400 scale-110' 
+                : 'text-white/60 group-hover:text-white'
+            }`} />
+            {bookmarks.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 text-white text-[9px] sm:text-[10px] font-bold rounded-full flex items-center justify-center animate-scale-in shadow-lg">
+                {bookmarks.length}
+              </span>
+            )}
+          </button>
+
+          <button
+            onClick={() => setShowMenu(true)}
+            className="group p-2.5 sm:p-3 rounded-full hover:bg-white/5 transition-all duration-300 btn-press min-w-[44px] min-h-[44px] flex items-center justify-center"
+            aria-label="Open menu"
+          >
+            <Menu className="w-5 h-5 sm:w-6 sm:h-6 text-white/70 group-hover:text-white" />
+          </button>
+        </div>
       </header>
 
       {/* Genre Filter - Mobile Optimized */}
@@ -756,6 +775,81 @@ function App() {
 
       {/* Toast Notification */}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
+      {/* Slide-out Menu */}
+      {showMenu && (
+        <div className="fixed inset-0 z-[60] animate-fade-in">
+          <div
+            className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+            onClick={() => setShowMenu(false)}
+          />
+          <div className="absolute left-0 top-0 bottom-0 w-[84vw] max-w-sm bg-black border-r border-white/10 p-5 sm:p-6 flex flex-col gap-6 animate-slide-in-left">
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden">
+                  <img src="/branding/minylogo.png" alt="miny y0" className="w-8 h-8 object-contain" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-white tracking-tight">y0</p>
+                  <p className="text-[11px] text-white/45">brand menu</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowMenu(false)}
+                className="p-2 rounded-full hover:bg-white/10"
+                aria-label="Close menu"
+              >
+                <X className="w-4 h-4 text-white/80" />
+              </button>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex items-center justify-between">
+              <img src="/branding/minylogo.png" alt="Miny logo" className="h-8 w-auto object-contain" />
+              <img src="/branding/velab-logo.png" alt="VE Lab logo" className="h-8 w-auto object-contain opacity-90" />
+            </div>
+
+            <nav className="space-y-2">
+              <a
+                href="https://minyvinyl.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center rounded-xl p-3 text-white/85 hover:bg-white/10"
+                aria-label="Open Miny Vinyl"
+                title="Open Miny Vinyl"
+              >
+                <img src="/branding/minylogo.png" alt="" className="h-6 w-6 object-contain" />
+              </a>
+              <a
+                href="https://velab.org"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center rounded-xl p-3 text-white/85 hover:bg-white/10"
+                aria-label="Open VE Lab"
+                title="Open VE Lab"
+              >
+                <img src="/branding/velab-logo.png" alt="" className="h-6 w-6 object-contain" />
+              </a>
+            </nav>
+
+            <div className="mt-auto">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => {
+                      setShowMenu(false);
+                      setShowBookmarks(true);
+                    }}
+                    className="w-11 h-11 rounded-xl bg-white/10 hover:bg-white/15 flex items-center justify-center"
+                    aria-label="Open bookmarks"
+                  >
+                    <Bookmark className={`w-5 h-5 ${bookmarks.length > 0 ? 'text-yellow-400 fill-yellow-400' : 'text-white/80'}`} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* SMS Modal */}
       {showTextModal && (
