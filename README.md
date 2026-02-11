@@ -1,54 +1,44 @@
 # miny-ven
 
-60-word music news aggregator with location-based targeting - Gospel, Hip-Hop, Pop, Rock, Electronic
+60-word music news PWA for creators - Gospel, Hip-Hop, Pop, Rock, Electronic
 
 ## 🎵 Live Demo
 
-**https://miny-ven.vercel.app**
+**https://dist-bay-two-38.vercel.app**
 
 ## ✨ Features
 
-- **Gold-Standard UI**: Premium glass-morphism design with smooth animations
+- **60-Word Summaries**: AI-powered concise music news using DeepSeek API
 - **5 Balanced Genres**: Gospel, Hip-Hop, Pop, Rock, Electronic
-- **60-Word Summaries**: AI-powered concise music news
-- **Location-Based News**: Target local music scenes and events
-- **Real-Time Updates**: Firebase Firestore for live content updates
-- **Bookmark & Share**: Save articles and share via email/social
-- **RSS Integration**: Jesusfreakhideout, Pitchfork, Cross Rhythms
-- **AI Summarization**: OpenRouter (Mistral 7B) for 60-word summaries
-- **Perplexity Search**: Location-aware music news discovery
+- **Smart Duplicate Detection**: Fuzzy matching (80% similarity) prevents duplicates
+- **Real-Time Updates**: 35+ articles from RSS feeds (hourly auto-refresh)
+- **Bookmarks**: Click title to save articles locally
+- **Swipe Navigation**: Mobile-optimized swipe to browse
+- **Pull to Refresh**: Easy content updates
 - **PWA Ready**: Installable on mobile devices
 
 ## 🏗️ Architecture
 
 ### Frontend
 - **Framework**: React 18 + TypeScript
-- **Styling**: Tailwind CSS with custom animations
+- **Styling**: Tailwind CSS with custom glass-morphism design
 - **Build Tool**: Vite
-- **PWA**: Service Worker, Manifest, Offline support
-- **UI Icons**: Lucide React
-- **State**: React hooks with localStorage persistence
+- **Data**: REST API calls to Firebase Firestore
+- **UI**: Genre badges and source on image, clickable titles
 
 ### Backend
 - **Language**: Python 3.11+
-- **RSS Scraping**: XML parsing with requests
-- **AI Summarization**: OpenRouter API (Mistral 7B)
-- **Location Search**: Perplexity API
-- **Database**: Firebase Firestore
-- **Scheduling**: Cron jobs for hourly updates
-
-### APIs
-- **OpenRouter**: AI summarization to 60 words
-- **Perplexity**: Location-based music news search
-- **Firebase**: Real-time database and hosting
+- **RSS Scraping**: Jesusfreakhideout, Pitchfork, Rolling Stone, Billboard
+- **AI Summarization**: DeepSeek API (60-word summaries)
+- **Database**: Firebase Firestore (REST API)
+- **Automation**: GitHub Actions cron job (hourly)
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+ 
 - Python 3.11+
-- Firebase account
-- Vercel account (for deployment)
+- Firebase project
 
 ### 1. Clone Repository
 
@@ -66,13 +56,8 @@ npm install
 # Create environment file
 cp .env.example .env
 
-# Edit .env with your Firebase credentials
-VITE_FIREBASE_API_KEY=your_firebase_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your_project_id
-# ... (see .env.example for all variables)
-
-# Start development server
+# Add your Firebase credentials to .env
+npm run build
 npm run dev
 ```
 
@@ -80,67 +65,42 @@ npm run dev
 
 ```bash
 cd scraper
-
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Install dependencies
 pip install -r requirements.txt
 
-# Create environment file
+# Add API keys to .env
 cp .env.example .env
-
-# Edit .env with your API keys
-OPENROUTER_API_KEY=your_openrouter_key
-PERPLEXITY_API_KEY=your_perplexity_key
-FIREBASE_CREDENTIALS_PATH=./firebase-credentials.json
 ```
 
-### 4. Firebase Setup
-
-1. Go to [Firebase Console](https://console.firebase.google.com)
-2. Create a new project
-3. Enable Firestore Database
-4. Download service account key
-5. Save as `scraper/firebase-credentials.json`
-6. Copy Firebase config to frontend `.env`
-
-### 5. Run Scraper
+### 4. Run Scraper Manually
 
 ```bash
 cd scraper
-python rss_scraper.py
+python3 rss_scraper.py
+```
+
+### 5. Clean Up Duplicates
+
+```bash
+cd scraper
+python3 cleanup_duplicates.py
 ```
 
 ## 📁 Project Structure
 
 ```
 miny-ven/
-├── .env.example              # Frontend environment template
-├── .gitignore               # Git ignore rules
-├── README.md                # This file
-├── index.html               # HTML entry point
-├── package.json             # Node dependencies
-├── scraper/                 # Python backend
-│   ├── .env.example         # Backend environment template
-│   ├── requirements.txt     # Python dependencies
-│   ├── rss_scraper.py       # RSS feed scraper
-│   └── seed_data.py         # Initial data seeder
-├── src/                     # Frontend source
-│   ├── App.tsx              # Main app component
-│   ├── App.css              # App styles
-│   ├── firebase.ts          # Firebase configuration
-│   ├── index.css            # Global styles
-│   ├── main.tsx             # Entry point
-│   ├── assets/              # Static assets
-│   ├── components/          # React components
-│   ├── data/                # Mock data
-│   └── types/               # TypeScript types
-├── public/                  # Public assets
-│   ├── manifest.json        # PWA manifest
-│   └── sw.js                # Service worker
-└── tailwind.config.js       # Tailwind configuration
+├── .github/workflows/         # GitHub Actions automation
+│   └── scraper.yml            # Hourly RSS scraper
+├── scraper/                   # Python backend
+│   ├── rss_scraper.py         # Main scraper with fuzzy duplicates
+│   ├── cleanup_duplicates.py  # Remove duplicate articles
+│   ├── seed_firebase_rest.py  # Initial data seeding
+│   └── .env                   # API keys
+├── src/                       # Frontend source
+│   ├── App.tsx               # Main app with bookmarks
+│   └── firebase.ts           # Firebase config
+├── firestore.rules           # Database security rules
+└── firebase.json             # Firebase config
 ```
 
 ## 🔐 Environment Variables
@@ -148,154 +108,95 @@ miny-ven/
 ### Frontend (.env)
 ```bash
 VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
-VITE_FIREBASE_MEASUREMENT_ID=
+VITE_FIREBASE_AUTH_DOMAIN=miny-ven.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=miny-ven
+VITE_FIREBASE_STORAGE_BUCKET=miny-ven.firebasestorage.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=1055083577389
+VITE_FIREBASE_APP_ID=1:1055083577389:web:xxx
+VITE_FIREBASE_MEASUREMENT_ID=G-xxx
 ```
 
 ### Backend (scraper/.env)
 ```bash
+FIREBASE_PROJECT_ID=miny-ven
+FIREBASE_API_KEY=
+DEEPSEEK_API_KEY=
 OPENROUTER_API_KEY=
 PERPLEXITY_API_KEY=
-FIREBASE_CREDENTIALS_PATH=
 ```
 
-## 🔧 Configuration
+## 🔄 Automation (GitHub Actions)
 
-### RSS Feed Sources
-Edit `scraper/rss_scraper.py` to add/modify sources:
+**Hourly RSS Scraper** runs automatically via GitHub Actions:
+- Checks 5 RSS sources every hour
+- Uses DeepSeek AI for 60-word summaries
+- Prevents duplicates with fuzzy matching (80% threshold)
+- Updates Firebase Firestore
 
-```python
-RSS_SOURCES = {
-    "jesusfreakhideout": {
-        "url": "https://www.jesusfreakhideout.com/news/feed.xml",
-        "genre": "gospel",
-        "priority": 1,
-    },
-    "pitchfork_news": {
-        "url": "https://pitchfork.com/feed/feed-news/rss",
-        "genre": "mixed",
-        "priority": 2,
-    },
-    # Add more sources here
-}
-```
-
-### Genre Classification
-Customize genre keywords in `scraper/rss_scraper.py`:
-
-```python
-GENRE_KEYWORDS = {
-    "gospel": ["gospel", "christian", "worship", "ccm", "church"],
-    "hiphop": ["hip-hop", "rap", "trap", "r&b", "drill"],
-    "pop": ["pop", "mainstream", "chart", "top 40"],
-    "rock": ["rock", "alternative", "indie", "punk", "metal"],
-    "electronic": ["electronic", "edm", "house", "techno", "dubstep"],
-}
-```
-
-## 📊 Data Flow
-
-```
-RSS Feeds → Python Scraper → OpenRouter AI → 60-Word Summary → Firebase
-Perplexity API → Location Search → OpenRouter AI → 60-Word Summary → Firebase
-Firebase → Real-time Updates → React PWA → User
-```
-
-## 🔄 Automation
-
-### Schedule Scraper (Cron)
-
-Run every 30 minutes:
+**Manual trigger:**
 ```bash
-*/30 * * * * cd /path/to/miny-ven/scraper && python rss_scraper.py >> scraper.log 2>&1
+gh workflow run scraper.yml
 ```
 
-Run Perplexity search hourly:
+**Monitor runs:**
 ```bash
-0 * * * * cd /path/to/miny-ven/scraper && python perplexity_scraper.py >> perplexity.log 2>&1
+gh run list --workflow=scraper.yml
 ```
+
+## 🎯 Current Status
+
+- **35 Articles** in database
+- **5 RSS Sources**: Jesusfreakhideout, Pitchfork News, Pitchfork Reviews, Rolling Stone, Billboard
+- **DeepSeek AI**: Summarizes to exactly 60 words
+- **No Duplicates**: Fuzzy matching prevents similar articles
+
+## 🔧 Key Features Explained
+
+### Duplicate Prevention
+The scraper uses **Jaccard similarity** to detect near-duplicate titles:
+- Extracts key words (removes "the", "a", "to", etc.)
+- Calculates 80% similarity threshold
+- Blocks articles like:
+  - "Adam Sandler Award for His Songwriting" vs "Adam Sandler Songwriting Award" → **Blocked**
+
+### Bookmarks
+- **Click article title** to bookmark/unbookmark
+- **Yellow bookmark icon** appears next to title when saved
+- **Bookmark button** in header shows count badge
+- Saved to browser localStorage
+
+### UI Layout
+- **Genre badge** (top-left of image): "Gospel", "Hip-Hop", etc.
+- **Source badge** (top-right of image): "Pitchfork", "Billboard", etc.
+- **Title**: Clickable to toggle bookmark
+- **16:9 Image**: Compact format for mobile
 
 ## 🚢 Deployment
 
 ### Vercel (Frontend)
+Already deployed: https://dist-bay-two-38.vercel.app
 
-1. Connect GitHub repo to Vercel
-2. Set environment variables in Vercel dashboard
-3. Deploy automatically on push to main
+```bash
+cd dist
+vercel --prod
+```
 
-### Firebase (Backend)
+### Firebase
+Firestore database with open read rules (for scraper access).
 
-1. Enable Firestore in Firebase Console
-2. Set up Firebase Authentication if needed
-3. Configure security rules for Firestore
+## 📱 Recent Articles
 
-## 📱 PWA Features
-
-- Installable on iOS/Android home screens
-- Offline reading capability
-- Push notifications (future)
-- Background sync (future)
-
-## 🎯 Roadmap
-
-### Phase 1: MVP ✅
-- Gold-standard UI
-- 5 balanced genres
-- RSS integration
-- Firebase backend
-
-### Phase 2: Enhanced Content
-- Perplexity API integration
-- Location-based targeting
-- User preferences (news types)
-- Real-time updates
-
-### Phase 3: Advanced Features
-- Audio previews
-- Push notifications
-- Multi-language support
-- Analytics dashboard
-
-### Phase 4: Monetization
-- Sponsored content
-- Premium tier
-- Affiliate links
-
-## 🔒 Security
-
-- All API keys stored in environment variables
-- Firebase security rules for database access
-- No sensitive data in repository
-- GitHub Secrets for CI/CD
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create feature branch: `git checkout -b feature/amazing-feature`
-3. Commit changes: `git commit -m 'Add amazing feature'`
-4. Push to branch: `git push origin feature/amazing-feature`
-5. Open Pull Request
+- Piss in the Wind (Pitchfork Reviews)
+- Do You Still Love Me? (Pitchfork Reviews)
+- Bad Bunny's Super Bowl Performance (Rolling Stone)
+- Britney Spears Sells Catalog (Rolling Stone)
+- Adam Sandler ASCAP Award (Billboard)
+- Fireflight's Dawn Michele New Group (Jesusfreakhideout)
 
 ## 📝 License
 
 Private repository - All rights reserved
 
-## 🙏 Acknowledgments
-
-- OpenRouter for AI summarization
-- Perplexity for location-based search
-- Firebase for real-time database
-- Unsplash for demo images
-- Lucide for icons
-
-## 📞 Support
-
-For questions or issues, please open a GitHub issue or contact the maintainers.
-
 ---
 
-Built with ❤️ for music lovers
+Built with ❤️ for music creators
