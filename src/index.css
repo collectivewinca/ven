@@ -236,3 +236,71 @@ a:focus-visible {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+/* Mobile Touch Optimizations */
+.touch-manipulation {
+  touch-action: manipulation;
+}
+
+/* Prevent text selection during swipe */
+.no-select {
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Enable momentum scrolling on iOS */
+.momentum-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Better touch feedback */
+@media (hover: none) {
+  .btn-press:active {
+    transform: scale(0.92);
+    opacity: 0.8;
+  }
+}
+
+/* Responsive Safe Areas */
+.safe-area-top {
+  padding-top: max(env(safe-area-inset-top), 0px);
+}
+
+.safe-area-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+
+.safe-area-left {
+  padding-left: max(env(safe-area-inset-left), 0px);
+}
+
+.safe-area-right {
+  padding-right: max(env(safe-area-inset-right), 0px);
+}
+
+/* iOS Status Bar handling */
+@supports (padding-top: env(safe-area-inset-top)) {
+  .ios-status-bar {
+    padding-top: env(safe-area-inset-top);
+  }
+}
+
+/* Mobile-specific animations */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Better font rendering on mobile */
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
