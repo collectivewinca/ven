@@ -86,29 +86,11 @@ function App() {
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch articles - uses mock data immediately, tries Firebase in background
+  // Fetch articles from Firebase only
   const fetchArticles = useCallback(async (genre: Genre = 'all') => {
     setLoading(true);
+    setArticles([]); // Clear articles while loading
     
-    // Load mock data immediately for instant display
-    try {
-      const { mockArticles } = await import('./data/mockArticles');
-      
-      // Filter by genre if needed
-      const filteredArticles = genre === 'all' 
-        ? mockArticles 
-        : mockArticles.filter((a: MusicNewsArticle) => a.primaryGenre === genre);
-      
-      setArticles(filteredArticles);
-      console.log(`Loaded ${filteredArticles.length} mock articles`);
-    } catch (error) {
-      console.error('Error loading mock data:', error);
-      setArticles([]);
-    } finally {
-      setLoading(false);
-    }
-    
-    // Try to fetch from Firebase in background (won't block UI)
     try {
       let q;
       if (genre === 'all') {
@@ -152,13 +134,18 @@ function App() {
         });
       });
       
-      // Only update if we got articles from Firebase
-      if (fetchedArticles.length > 0) {
-        console.log(`Loaded ${fetchedArticles.length} articles from Firebase`);
-        setArticles(fetchedArticles);
+      setArticles(fetchedArticles);
+      console.log(`Loaded ${fetchedArticles.length} articles from Firebase`);
+      
+      if (fetchedArticles.length === 0) {
+        setToast('No articles found. Run the scraper to add content.');
       }
     } catch (error) {
-      console.log('Firebase not configured, using mock data only');
+      console.error('Error fetching articles:', error);
+      setArticles([]);
+      setToast('Error loading articles. Check Firebase configuration.');
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -339,12 +326,19 @@ function App() {
     setCurrentIndex(0);
   }, [selectedGenre]);
 
-  if (!currentArticle) {
+  if (!currentArticle && !loading) {
     return (
       <div className="h-screen bg-black flex items-center justify-center safe-area-top safe-area-bottom">
         <div className="text-center px-4">
           <Music className="w-16 h-16 text-white/20 mx-auto mb-4" />
-          <p className="text-white/40 text-lg">No articles found</p>
+          <p className="text-white/40 text-lg mb-2">No articles found</p>
+          <p className="text-white/20 text-sm">Run the scraper to populate Firebase with content</p>
+          <button 
+            onClick={() => fetchArticles(selectedGenre)}
+            className="mt-6 px-6 py-3 bg-white/10 rounded-full text-white hover:bg-white/20 transition-all"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
