@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "name": "miny-ven",
+  "alias": ["miny-ven.vercel.app"],
+  "github": {
+    "enabled": false
+  }
+}

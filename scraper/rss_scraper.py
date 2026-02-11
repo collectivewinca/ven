@@ -26,6 +26,8 @@ except ImportError:
 # Configuration
 OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
+PERPLEXITY_URL = "https://api.perplexity.ai/chat/completions"
 PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "miny-ven")
 API_KEY = os.getenv("FIREBASE_API_KEY", "")
 FIRESTORE_URL = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents"
@@ -239,58 +241,144 @@ Summary (60 words max):"""
             words = content.split()[:60]
             return " ".join(words) + "." if words else title
 
-        prompt = f"""Summarize this music news article in EXACTLY 60 words or less.
+    def research_with_perplexity(self, artist: str, topic: str) -> str:
+        """Research article topic using Perplexity API for deeper insights"""
+        if not PERPLEXITY_API_KEY:
+            return ""
 
-Title: {title}
-
-Content: {content[:2000]}
-
-Requirements:
-- Exactly 60 words maximum
-- Include artist names
-- Mention the key development/news
-- Keep it engaging and concise
-- No filler words
-
-Summary (60 words max):"""
+        prompt = f"""Research the latest news about {artist} and {topic}. 
+        Provide 2-3 key facts or developments that would be interesting to music fans.
+        Keep it concise and factual."""
 
         headers = {
-            "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+            "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
             "Content-Type": "application/json",
-            "HTTP-Referer": "https://miny-ven.vercel.app",
-            "X-Title": "miny-ven",
         }
 
         data = {
-            "model": "mistralai/mistral-7b-instruct:free",
+            "model": "llama-3.1-sonar-small-128k-online",
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a professional music journalist who writes concise 60-word summaries.",
+                    "content": "You are a music industry research assistant. Provide factual, current information about artists and music news.",
                 },
                 {"role": "user", "content": prompt},
             ],
-            "max_tokens": 100,
-            "temperature": 0.7,
+            "max_tokens": 200,
+            "temperature": 0.3,
         }
 
         try:
             response = requests.post(
-                OPENROUTER_URL, headers=headers, json=data, timeout=30
+                PERPLEXITY_URL, headers=headers, json=data, timeout=30
             )
             response.raise_for_status()
             result = response.json()
-            summary = result["choices"][0]["message"]["content"].strip()
-
-            words = summary.split()
-            if len(words) > 60:
-                summary = " ".join(words[:60]) + "."
-
-            return summary
+            research = result["choices"][0]["message"]["content"].strip()
+            return research
         except Exception as e:
-            print(f"  ⚠ OpenRouter error: {e}, using fallback")
-            words = content.split()[:60]
-            return " ".join(words) + "." if words else title
+            print(f"  ⚠ Perplexity research error: {e}")
+            return ""
+
+    def generate_cta_headline(
+        self, original_title: str, content: str, artist: str
+    ) -> str:
+        """Generate high-converting CTA headline that's not copy-paste"""
+        if not PERPLEXITY_API_KEY:
+            # Fallback: transform original title
+            return self._transform_title_fallback(original_title)
+
+        prompt = f"""Create an engaging, click-worthy headline for this music news story.
+        
+Original Title: {original_title}
+Artist: {artist}
+Content Summary: {content[:500]}
+
+Requirements:
+- Write a NEW headline (NOT a copy-paste of the original)
+- Use power words that drive clicks (Breaking, Exclusive, Revealed, Unveiled, Must-See, etc.)
+- Create curiosity gap or urgency
+- Keep under 80 characters
+- Make it punchy and shareable
+- Avoid clickbait that doesn't deliver
+
+Examples of good CTA headlines:
+- "Breaking: [Artist] Just Dropped Something Huge"
+- "The Real Reason [Artist] Is Making Waves"
+- "What [Artist] Just Revealed Changes Everything"
+- "Exclusive: Inside [Artist]'s Latest Move"
+
+New CTA Headline:"""
+
+        headers = {
+            "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        data = {
+            "model": "llama-3.1-sonar-small-128k-online",
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a viral headline writer for a music news app. Create headlines that get clicks while staying authentic to the story.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": 100,
+            "temperature": 0.8,
+        }
+
+        try:
+            response = requests.post(
+                PERPLEXITY_URL, headers=headers, json=data, timeout=30
+            )
+            response.raise_for_status()
+            result = response.json()
+            headline = result["choices"][0]["message"]["content"].strip()
+
+            # Clean up quotes if present
+            headline = headline.strip("\"'")
+
+            # Ensure it's not too long
+            if len(headline) > 100:
+                headline = headline[:97] + "..."
+
+            return headline
+        except Exception as e:
+            print(f"  ⚠ CTA headline error: {e}, using fallback")
+            return self._transform_title_fallback(original_title)
+
+    def _transform_title_fallback(self, original_title: str) -> str:
+        """Fallback method to transform title without API"""
+        # Remove publication names and common prefixes
+        title = re.sub(
+            r"^(Premiere:|Exclusive:|Watch:|Listen:|Review:|Interview:)\s*",
+            "",
+            original_title,
+            flags=re.IGNORECASE,
+        )
+
+        # Power words to add
+        power_words = [
+            "Breaking",
+            "Exclusive",
+            "Revealed",
+            "Unveiled",
+            "Must-See",
+            "Inside",
+        ]
+
+        # Check if title already has power words
+        has_power_word = any(word.lower() in title.lower() for word in power_words)
+
+        if not has_power_word and len(title) < 70:
+            # Add a power word
+            import random
+
+            power_word = random.choice(power_words)
+            title = f"{power_word}: {title}"
+
+        return title.strip()
 
     def classify_genre(self, title: str, content: str, source_genre: str) -> tuple:
         """Classify article genre based on content"""
@@ -448,7 +536,7 @@ Summary (60 words max):"""
             return False
 
     def process_feed(self, source_name: str, source_config: Dict):
-        """Process a single RSS feed"""
+        """Process a single RSS feed with CTA headlines and Perplexity research"""
         print(f"\n📡 Fetching {source_name}...")
 
         items = self.fetch_rss_feed(source_config["url"])
@@ -457,18 +545,42 @@ Summary (60 words max):"""
         processed = 0
         for item in items[:5]:  # Process top 5 items per feed
             try:
-                if self.check_duplicate(item["title"]):
-                    print(f"  ⚠ Duplicate: {item['title'][:50]}...")
+                original_title = item["title"]
+                content = item["content"] or item["description"]
+
+                # Check for duplicate using original title
+                if self.check_duplicate(original_title):
+                    print(f"  ⚠ Duplicate: {original_title[:50]}...")
                     continue
 
-                content = item["content"] or item["description"]
-                summary = self.summarize_with_deepseek(item["title"], content)
+                # Extract artists first for research
+                artists = self.extract_artists(original_title, content)
+                main_artist = artists[0] if artists else ""
 
-                primary_genre, secondary_genres = self.classify_genre(
-                    item["title"], content, source_config["genre"]
+                # Generate high-CTA headline (not copy-paste)
+                print(f"  📝 Generating CTA headline...")
+                cta_title = self.generate_cta_headline(
+                    original_title, content, main_artist
                 )
 
-                artists = self.extract_artists(item["title"], content)
+                # Research with Perplexity for additional insights
+                research = ""
+                if main_artist and PERPLEXITY_API_KEY:
+                    print(f"  🔍 Researching with Perplexity...")
+                    # Extract topic from title
+                    topic = original_title.replace(main_artist, "").strip()
+                    research = self.research_with_perplexity(main_artist, topic)
+
+                # Summarize with DeepSeek (including research if available)
+                content_with_research = content
+                if research:
+                    content_with_research += f"\n\nAdditional context: {research}"
+
+                summary = self.summarize_with_deepseek(cta_title, content_with_research)
+
+                primary_genre, secondary_genres = self.classify_genre(
+                    original_title, content, source_config["genre"]
+                )
 
                 try:
                     pub_date = datetime.strptime(
@@ -478,10 +590,10 @@ Summary (60 words max):"""
                     pub_date = datetime.now()
 
                 article = Article(
-                    id=re.sub(r"[^a-zA-Z0-9]", "-", item["title"].lower())[:50],
-                    title=item["title"],
+                    id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
+                    title=cta_title,  # Use CTA headline, not original
                     summary=summary,
-                    full_content=content[:2000],
+                    full_content=content_with_research[:2000],
                     source=source_name.replace("_", " ").title(),
                     source_url=item["link"],
                     primary_genre=primary_genre,
@@ -499,6 +611,7 @@ Summary (60 words max):"""
                 )
 
                 if self.save_to_firebase(article):
+                    print(f"  ✓ Saved: {cta_title[:60]}...")
                     processed += 1
 
             except Exception as e:
