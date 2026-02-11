@@ -86,9 +86,29 @@ function App() {
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch articles from Firebase
+  // Fetch articles - uses mock data immediately, tries Firebase in background
   const fetchArticles = useCallback(async (genre: Genre = 'all') => {
     setLoading(true);
+    
+    // Load mock data immediately for instant display
+    try {
+      const { mockArticles } = await import('./data/mockArticles');
+      
+      // Filter by genre if needed
+      const filteredArticles = genre === 'all' 
+        ? mockArticles 
+        : mockArticles.filter((a: MusicNewsArticle) => a.primaryGenre === genre);
+      
+      setArticles(filteredArticles);
+      console.log(`Loaded ${filteredArticles.length} mock articles`);
+    } catch (error) {
+      console.error('Error loading mock data:', error);
+      setArticles([]);
+    } finally {
+      setLoading(false);
+    }
+    
+    // Try to fetch from Firebase in background (won't block UI)
     try {
       let q;
       if (genre === 'all') {
@@ -132,21 +152,13 @@ function App() {
         });
       });
       
-      // If no articles in Firebase, fall back to mock data for now
-      if (fetchedArticles.length === 0) {
-        console.log('No articles in Firebase, using mock data');
-        const { mockArticles } = await import('./data/mockArticles');
-        setArticles(mockArticles);
-      } else {
+      // Only update if we got articles from Firebase
+      if (fetchedArticles.length > 0) {
+        console.log(`Loaded ${fetchedArticles.length} articles from Firebase`);
         setArticles(fetchedArticles);
       }
     } catch (error) {
-      console.error('Error fetching articles:', error);
-      // Fallback to mock data
-      const { mockArticles } = await import('./data/mockArticles');
-      setArticles(mockArticles);
-    } finally {
-      setLoading(false);
+      console.log('Firebase not configured, using mock data only');
     }
   }, []);
 
