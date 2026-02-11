@@ -4,7 +4,7 @@
 
 ## 🎵 Live Demo
 
-**https://dist-bay-two-38.vercel.app**
+**https://minyven-news.vercel.app**
 
 ## ✨ Features
 

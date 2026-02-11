@@ -1,7 +1,7 @@
 {
   "version": 2,
   "name": "miny-ven",
-  "alias": ["miny-ven.vercel.app"],
+  "alias": ["minyven-news.vercel.app", "miny-ven.vercel.app"],
   "github": {
     "enabled": false
   }
