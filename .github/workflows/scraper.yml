@@ -40,3 +40,4 @@ jobs:
       if: always()
       run: |
         echo "Scraper completed at $(date)"
+        echo "Articles in database: $(curl -s 'https://firestore.googleapis.com/v1/projects/miny-ven/databases/(default)/documents/articles?key=${{ secrets.FIREBASE_API_KEY }}' | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get(\"documents\",[])))' 2>/dev/null || echo 'unknown')"
