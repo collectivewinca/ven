@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
-import { Bookmark, Share2, Mail, Heart, Music, X, ChevronUp, ChevronDown, ExternalLink, RefreshCw } from 'lucide-react';
+import { Bookmark, Share2, Mail, Heart, Music, X, ChevronUp, ChevronDown, ExternalLink, RefreshCw, Smartphone, MessageSquare, Send } from 'lucide-react';
 
 // Loading skeleton component
 const ArticleSkeleton = () => (
@@ -81,6 +81,17 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
+  const [showTextModal, setShowTextModal] = useState(false);
+  const [smsPhone, setSmsPhone] = useState('');
+  const [smsSending, setSmsSending] = useState(false);
+  const [isDesktopViewport, setIsDesktopViewport] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth >= 1024;
+  });
+  const [useDesktopShell, setUseDesktopShell] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth >= 1024;
+  });
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -91,8 +102,13 @@ function App() {
     
     try {
       // Use REST API directly to avoid Firestore client issues
-      const projectId = 'miny-ven';
-      const apiKey = 'AIzaSyCD7B4GDaRypsBGWODRyhxiGXnFUbAehfM';
+      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+      const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
+
+      if (!projectId || !apiKey) {
+        throw new Error('Missing Firebase configuration. Set VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_API_KEY.');
+      }
+
       const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/articles?key=${apiKey}`;
       
       console.log('Fetching articles from REST API...');
@@ -269,6 +285,50 @@ function App() {
     setToast('Email client opened');
   }, [currentArticle, trackEvent]);
 
+  const handleTextLink = useCallback(async () => {
+    if (!currentArticle) return;
+    const phone = smsPhone.trim();
+    if (!phone) {
+      setToast('Enter a phone number first.');
+      return;
+    }
+
+    setSmsSending(true);
+    try {
+      const appUrl = import.meta.env.VITE_PUBLIC_APP_URL || window.location.origin;
+      const payload = {
+        to: phone,
+        text: `Check this on miny-ven: ${currentArticle.title}\n${currentArticle.sourceUrl}\nApp: ${appUrl}`,
+        articleTitle: currentArticle.title,
+        articleUrl: currentArticle.sourceUrl,
+      };
+
+      const response = await fetch('/api/quo-sms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data?.error || 'Failed to send SMS');
+      }
+
+      setShowTextModal(false);
+      setSmsPhone('');
+      trackEvent('text_link', currentArticle.id);
+      setToast('Text sent successfully.');
+    } catch (error: any) {
+      const fallbackBody = encodeURIComponent(
+        `Check this on miny-ven: ${currentArticle.title}\n${currentArticle.sourceUrl}`
+      );
+      window.open(`sms:${phone}?&body=${fallbackBody}`);
+      setToast(error?.message ? `API failed (${error.message}). Opened SMS app.` : 'API failed. Opened SMS app.');
+    } finally {
+      setSmsSending(false);
+    }
+  }, [currentArticle, smsPhone, trackEvent]);
+
   // Enhanced touch handlers with pull-to-refresh and drag feedback
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     const touchY = e.targetTouches[0].clientY;
@@ -352,26 +412,35 @@ function App() {
     setCurrentIndex(0);
   }, [selectedGenre]);
 
-  if (!currentArticle && !loading) {
-    return (
-      <div className="h-screen bg-black flex items-center justify-center safe-area-top safe-area-bottom">
-        <div className="text-center px-4">
-          <Music className="w-16 h-16 text-white/20 mx-auto mb-4" />
-          <p className="text-white/40 text-lg mb-2">No articles found</p>
-          <p className="text-white/20 text-sm">Run the scraper to populate Firebase with content</p>
-          <button 
-            onClick={() => fetchArticles(selectedGenre)}
-            className="mt-6 px-6 py-3 bg-white/10 rounded-full text-white hover:bg-white/20 transition-all"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    const onResize = () => {
+      const desktop = window.innerWidth >= 1024;
+      setIsDesktopViewport(desktop);
+      if (!desktop) setUseDesktopShell(false);
+    };
 
-  return (
-    <div className="h-screen bg-black flex flex-col overflow-hidden safe-area-top safe-area-bottom">
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  const showDesktopShell = isDesktopViewport && useDesktopShell;
+
+  const appContent = !currentArticle && !loading ? (
+    <div className="h-full bg-black flex items-center justify-center safe-area-top safe-area-bottom">
+      <div className="text-center px-4">
+        <Music className="w-16 h-16 text-white/20 mx-auto mb-4" />
+        <p className="text-white/40 text-lg mb-2">No articles found</p>
+        <p className="text-white/20 text-sm">Run the scraper to populate Firebase with content</p>
+        <button 
+          onClick={() => fetchArticles(selectedGenre)}
+          className="mt-6 px-6 py-3 bg-white/10 rounded-full text-white hover:bg-white/20 transition-all"
+        >
+          Retry
+        </button>
+      </div>
+    </div>
+  ) : (
+    <div className="h-full bg-black flex flex-col overflow-hidden safe-area-top safe-area-bottom">
       {/* Pull to Refresh Indicator */}
       <PullToRefresh pullDistance={pullDistance} isPulling={isPulling} />
       
@@ -564,6 +633,14 @@ function App() {
                   >
                     <Mail className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
                   </button>
+
+                  <button
+                    onClick={() => setShowTextModal(true)}
+                    className="group p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-all duration-300 btn-press min-w-[48px] min-h-[48px] flex items-center justify-center"
+                    aria-label="Text article link"
+                  >
+                    <MessageSquare className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
+                  </button>
                 </div>
 
                 {/* Popularity Score */}
@@ -679,6 +756,79 @@ function App() {
 
       {/* Toast Notification */}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+
+      {/* SMS Modal */}
+      {showTextModal && (
+        <div className="fixed inset-0 z-50 animate-fade-in">
+          <div
+            className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+            onClick={() => setShowTextModal(false)}
+          />
+          <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 mx-auto w-full max-w-md rounded-3xl border border-white/15 bg-black/90 p-5 shadow-2xl">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-white">Text This Link</h3>
+              <p className="mt-1 text-sm text-white/55">Send this article link using Quo API.</p>
+            </div>
+            <label className="mb-2 block text-xs uppercase tracking-wide text-white/45">Phone Number</label>
+            <input
+              value={smsPhone}
+              onChange={(e) => setSmsPhone(e.target.value)}
+              placeholder="+1 555 123 4567"
+              className="w-full rounded-2xl border border-white/15 bg-white/5 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-white/40"
+              autoFocus
+            />
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setShowTextModal(false)}
+                className="rounded-xl px-4 py-2 text-sm text-white/75 hover:bg-white/10"
+                type="button"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleTextLink}
+                disabled={smsSending}
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-medium text-black disabled:opacity-50"
+                type="button"
+              >
+                <Send className="h-4 w-4" />
+                {smsSending ? 'Sending...' : 'Send text'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className={showDesktopShell ? 'desktop-shell-scene' : ''}>
+      {isDesktopViewport && (
+        <button
+          onClick={() => setUseDesktopShell(prev => !prev)}
+          className="desktop-shell-toggle"
+          type="button"
+        >
+          <Smartphone className="w-4 h-4" />
+          {showDesktopShell ? 'Shell on' : 'Shell off'}
+        </button>
+      )}
+
+      <div className={showDesktopShell ? 'iphone-shell-frame' : ''}>
+        {showDesktopShell && (
+          <>
+            <span className="iphone-side-btn iphone-side-btn--mute" />
+            <span className="iphone-side-btn iphone-side-btn--up" />
+            <span className="iphone-side-btn iphone-side-btn--down" />
+            <span className="iphone-side-btn iphone-side-btn--power" />
+            <div className="iphone-dynamic-island" />
+          </>
+        )}
+
+        <div className={showDesktopShell ? 'iphone-shell-screen' : 'h-[100dvh]'}>
+          {appContent}
+        </div>
+      </div>
     </div>
   );
 }

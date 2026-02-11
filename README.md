@@ -13,6 +13,7 @@
 - **Smart Duplicate Detection**: Fuzzy matching (80% similarity) prevents duplicates
 - **Real-Time Updates**: 35+ articles from RSS feeds (hourly auto-refresh)
 - **Bookmarks**: Click title to save articles locally
+- **Text Link (Quo API)**: Send article links via SMS from the app
 - **Swipe Navigation**: Mobile-optimized swipe to browse
 - **Pull to Refresh**: Easy content updates
 - **PWA Ready**: Installable on mobile devices
@@ -99,6 +100,8 @@ miny-ven/
 ├── src/                       # Frontend source
 │   ├── App.tsx               # Main app with bookmarks
 │   └── firebase.ts           # Firebase config
+├── api/
+│   └── quo-sms.js            # Server-side Quo SMS endpoint
 ├── firestore.rules           # Database security rules
 └── firebase.json             # Firebase config
 ```
@@ -114,6 +117,7 @@ VITE_FIREBASE_STORAGE_BUCKET=miny-ven.firebasestorage.app
 VITE_FIREBASE_MESSAGING_SENDER_ID=1055083577389
 VITE_FIREBASE_APP_ID=1:1055083577389:web:xxx
 VITE_FIREBASE_MEASUREMENT_ID=G-xxx
+VITE_PUBLIC_APP_URL=https://miny-ven.vercel.app
 ```
 
 ### Backend (scraper/.env)
@@ -123,6 +127,15 @@ FIREBASE_API_KEY=
 DEEPSEEK_API_KEY=
 OPENROUTER_API_KEY=
 PERPLEXITY_API_KEY=
+```
+
+### Vercel Server Environment Variables (for Quo SMS API)
+```bash
+QUO_API_URL=
+QUO_API_KEY=
+QUO_API_KEY_HEADER=Authorization
+QUO_AUTH_SCHEME=raw
+QUO_FROM=
 ```
 
 ## 🔄 Automation (GitHub Actions)
@@ -182,7 +195,9 @@ vercel --prod
 ```
 
 ### Firebase
-Firestore database with open read rules (for scraper access).
+Firestore database with public reads and constrained writes:
+- Authenticated users can write/delete.
+- Unauthenticated scraper writes are limited to strict article schema + safe counters.
 
 ## 📱 Recent Articles
 

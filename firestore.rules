@@ -1,9 +1,101 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    function hasRequiredArticleFields() {
+      return request.resource.data.keys().hasAll([
+        'title',
+        'summary',
+        'full_content',
+        'source',
+        'source_url',
+        'primary_genre',
+        'secondary_genres',
+        'artist_names',
+        'image_url',
+        'published_at',
+        'read_time',
+        'share_count',
+        'email_count',
+        'bookmark_count',
+        'view_count',
+        'fetched_at'
+      ]);
+    }
+
+    function hasOnlyAllowedArticleFields() {
+      return request.resource.data.keys().hasOnly([
+        'title',
+        'summary',
+        'full_content',
+        'source',
+        'source_url',
+        'primary_genre',
+        'secondary_genres',
+        'artist_names',
+        'image_url',
+        'published_at',
+        'read_time',
+        'share_count',
+        'email_count',
+        'bookmark_count',
+        'view_count',
+        'fetched_at'
+      ]);
+    }
+
+    function hasValidArticleTypes() {
+      return request.resource.data.title is string &&
+        request.resource.data.summary is string &&
+        request.resource.data.full_content is string &&
+        request.resource.data.source is string &&
+        request.resource.data.source_url is string &&
+        request.resource.data.primary_genre is string &&
+        request.resource.data.secondary_genres is list &&
+        request.resource.data.artist_names is list &&
+        request.resource.data.image_url is string &&
+        request.resource.data.published_at is string &&
+        request.resource.data.read_time is int &&
+        request.resource.data.share_count is int &&
+        request.resource.data.email_count is int &&
+        request.resource.data.bookmark_count is int &&
+        request.resource.data.view_count is int &&
+        request.resource.data.fetched_at is string;
+    }
+
+    function hasReasonableArticleLimits() {
+      return request.resource.data.title.size() > 0 &&
+        request.resource.data.title.size() <= 200 &&
+        request.resource.data.summary.size() > 0 &&
+        request.resource.data.summary.size() <= 1000 &&
+        request.resource.data.full_content.size() <= 4000 &&
+        request.resource.data.source_url.matches('^https://.*') &&
+        request.resource.data.read_time >= 1 &&
+        request.resource.data.read_time <= 600 &&
+        request.resource.data.share_count >= 0 &&
+        request.resource.data.email_count >= 0 &&
+        request.resource.data.bookmark_count >= 0 &&
+        request.resource.data.view_count >= 0;
+    }
+
+    function isConstrainedScraperWrite() {
+      return request.auth == null &&
+        hasRequiredArticleFields() &&
+        hasOnlyAllowedArticleFields() &&
+        hasValidArticleTypes() &&
+        hasReasonableArticleLimits() &&
+        request.resource.data.share_count == 0 &&
+        request.resource.data.email_count == 0 &&
+        request.resource.data.bookmark_count == 0;
+    }
+
     match /articles/{articleId} {
       allow read: if true;
-      allow write: if true;
+      allow create, update: if request.auth != null || isConstrainedScraperWrite();
+      allow delete: if request.auth != null;
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
