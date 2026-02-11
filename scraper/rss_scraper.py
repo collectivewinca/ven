@@ -353,7 +353,7 @@ Summary (60 words max):"""
         return fields
 
     def check_duplicate(self, title: str) -> bool:
-        """Check if article already exists in Firestore"""
+        """Check if article already exists in Firestore using fuzzy matching"""
         try:
             # Fetch all articles and check titles
             url = f"{FIRESTORE_URL}/articles?key={API_KEY}"
@@ -366,14 +366,57 @@ Summary (60 words max):"""
             if not data.get("documents"):
                 return False
 
+            # Normalize the new title
             normalized = title.lower().strip()
+
+            # Extract key words (remove common words like "the", "a", "to", etc.)
+            def extract_key_words(text):
+                common_words = {
+                    "the",
+                    "a",
+                    "an",
+                    "to",
+                    "for",
+                    "of",
+                    "in",
+                    "on",
+                    "at",
+                    "with",
+                    "and",
+                    "is",
+                    "are",
+                    "was",
+                    "were",
+                }
+                words = text.lower().strip().split()
+                return set(w for w in words if w not in common_words and len(w) > 2)
+
+            new_key_words = extract_key_words(title)
+
             for doc in data["documents"]:
                 fields = doc.get("fields", {})
                 existing_title = (
                     fields.get("title", {}).get("stringValue", "").lower().strip()
                 )
+
+                # Check for exact match
                 if existing_title == normalized:
                     return True
+
+                # Check for high similarity (if key words overlap significantly)
+                existing_key_words = extract_key_words(existing_title)
+                if new_key_words and existing_key_words:
+                    # Calculate Jaccard similarity
+                    intersection = len(new_key_words & existing_key_words)
+                    union = len(new_key_words | existing_key_words)
+                    if union > 0:
+                        similarity = intersection / union
+                        # If 80% or more key words match, consider it a duplicate
+                        if similarity >= 0.8:
+                            print(
+                                f"  ⚠ Similar title detected ({similarity:.0%} match): {existing_title[:50]}..."
+                            )
+                            return True
 
             return False
         except Exception as e:
