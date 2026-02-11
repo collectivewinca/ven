@@ -1,0 +1,42 @@
+name: Hourly RSS Scraper
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        cd scraper
+        pip install -r requirements.txt
+        pip install python-dotenv
+    
+    - name: Run RSS Scraper
+      env:
+        FIREBASE_PROJECT_ID: miny-ven
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+      run: |
+        cd scraper
+        python3 rss_scraper.py
+    
+    - name: Report status
+      if: always()
+      run: |
+        echo "Scraper completed at $(date)"
