@@ -267,6 +267,12 @@ Summary (60 words max):"""
             result = response.json()
             summary = result["choices"][0]["message"]["content"].strip()
 
+            # Guard against model meta-commentary
+            if self._is_refusal(summary):
+                print("  ⚠ DeepSeek refused summary, using fallback")
+                words = content.split()[:60]
+                return " ".join(words) + "." if words else title
+
             words = summary.split()
             if len(words) > 60:
                 summary = " ".join(words[:60]) + "."
@@ -276,6 +282,26 @@ Summary (60 words max):"""
             print(f"  ⚠ DeepSeek error: {e}, using fallback")
             words = content.split()[:60]
             return " ".join(words) + "." if words else title
+
+    # Phrases that indicate the model broke character instead of
+    # producing a real headline or summary.  Checked case-insensitively
+    # against the full text (not just the prefix).
+    _REFUSAL_PATTERNS = re.compile(
+        r"(?i)"
+        r"(?:"
+        r"i appreciate|i need to|i can'?t|as an ai|i'?m sorry"
+        r"|i notice|i see that|i don'?t have|unfortunately"
+        r"|based on the search|the search results"
+        r"|provided don'?t contain|no (?:relevant|specific) (?:information|results|data)"
+        r"|i (?:wasn'?t|was not) able"
+        r"|(?:here(?:'s| is) (?:a|the|my))|let me "
+        r")"
+    )
+
+    @classmethod
+    def _is_refusal(cls, text: str) -> bool:
+        """Return True if *text* looks like model meta-commentary."""
+        return bool(cls._REFUSAL_PATTERNS.search(text))
 
     @staticmethod
     def _clean_perplexity_text(text: str) -> str:
@@ -400,8 +426,7 @@ New CTA Headline:"""
             headline = self._clean_perplexity_text(headline)
 
             # Guard against model refusals / meta-commentary
-            refusal_prefixes = ("i appreciate", "i need to", "i can't", "as an ai")
-            if headline.lower().startswith(refusal_prefixes):
+            if self._is_refusal(headline):
                 print("  ⚠ Perplexity refused headline, using fallback")
                 return self._transform_title_fallback(original_title)
 
