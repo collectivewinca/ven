@@ -57,8 +57,8 @@ jobs:
         FIREBASE_PROJECT_ID: miny-ven
         FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
         DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+        EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
       run: |
         cd scraper
         python3 rss_scraper.py

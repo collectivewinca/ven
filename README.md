@@ -6,6 +6,15 @@
 
 **https://minyven-news.vercel.app**
 
+## 📝 Latest Updates (2026-02-13)
+
+- Deployed latest production build via Vercel CLI.
+- Fixed frontend fallback so local app can fetch Firestore data without a fully populated local `.env`.
+- Updated scraper duplicate handling to prioritize canonical `source_url`.
+- Increased feed intake and sorted RSS items by `pubDate` before processing.
+- Added workflow preflight Firestore check and freshness guard (`fetched_at` must be within 24h).
+- Current blocker: scraper workflow runs complete but Firestore data remains stale after `2026-02-11`.
+
 ## ✨ Features
 
 - **60-Word Summaries**: AI-powered concise music news using DeepSeek API

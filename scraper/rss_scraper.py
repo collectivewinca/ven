@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-miny-ven RSS Scraper with OpenRouter Summarization
-Fetches music news from RSS feeds and summarizes them to 60 words
-Uses REST API instead of firebase_admin
+miny-ven RSS Scraper with AI Summarization
+Fetches music news from RSS feeds and summarizes them to 60 words.
+Uses Perplexity SDK for headlines/research, DeepSeek for summaries,
+and Firestore REST API for storage.
 """
 
 import xml.etree.ElementTree as ET
+import json
 import requests
 import re
 from datetime import datetime
@@ -25,11 +27,29 @@ try:
 except ImportError:
     pass
 
-# Configuration
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+# Perplexity SDK (optional — falls back to basic transforms if unavailable)
+_perplexity_client = None
 PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "")
-PERPLEXITY_URL = "https://api.perplexity.ai/chat/completions"
+if PERPLEXITY_API_KEY:
+    try:
+        from perplexity import Perplexity
+
+        _perplexity_client = Perplexity(api_key=PERPLEXITY_API_KEY)
+    except ImportError:
+        print("⚠ perplexityai package not installed, using fallbacks")
+
+# Exa SDK (optional — used for article research and news discovery)
+_exa_client = None
+EXA_API_KEY = os.getenv("EXA_API_KEY", "")
+if EXA_API_KEY:
+    try:
+        from exa_py import Exa
+
+        _exa_client = Exa(api_key=EXA_API_KEY)
+    except ImportError:
+        print("⚠ exa_py package not installed, Exa features disabled")
+
+# Configuration
 PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "miny-ven")
 API_KEY = os.getenv("FIREBASE_API_KEY", "")
 FIRESTORE_URL = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents"
@@ -257,41 +277,73 @@ Summary (60 words max):"""
             words = content.split()[:60]
             return " ".join(words) + "." if words else title
 
-    def research_with_perplexity(self, artist: str, topic: str) -> str:
-        """Research article topic using Perplexity API for deeper insights"""
-        if not PERPLEXITY_API_KEY:
+    @staticmethod
+    def _clean_perplexity_text(text: str) -> str:
+        """Strip markdown bold, citation brackets, and stray whitespace."""
+        text = text.strip()
+        text = re.sub(r"\*+", "", text)  # **bold** → bold
+        text = re.sub(r"\[[\d,\s]+\]", "", text)  # [1][2] → ""
+        text = text.strip("\"'")
+        return text.strip()
+
+    def research_with_exa(self, artist: str, topic: str) -> str:
+        """Research article topic using Exa search for deeper insights."""
+        if not _exa_client:
+            return self._research_with_perplexity_fallback(artist, topic)
+
+        query = f"{artist} {topic} music news 2026".strip()
+        try:
+            result = _exa_client.search(
+                query,
+                type="auto",
+                num_results=3,
+                contents={"text": {"max_characters": 500}},
+            )
+            snippets = []
+            for r in result.results:
+                if r.text:
+                    # Strip HTML residue and take first 200 chars
+                    clean = re.sub(r"<[^>]+>", "", r.text).strip()
+                    clean = re.sub(r"\s+", " ", clean)[:200]
+                    if clean:
+                        snippets.append(clean)
+            if snippets:
+                return " | ".join(snippets[:2])
+            return ""
+        except Exception as e:
+            print(f"  ⚠ Exa research error: {e}")
+            return self._research_with_perplexity_fallback(artist, topic)
+
+    def _research_with_perplexity_fallback(self, artist: str, topic: str) -> str:
+        """Fallback: research using Perplexity SDK if Exa is unavailable."""
+        if not _perplexity_client:
             return ""
 
-        prompt = f"""Research the latest news about {artist} and {topic}. 
-        Provide 2-3 key facts or developments that would be interesting to music fans.
-        Keep it concise and factual."""
-
-        headers = {
-            "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        data = {
-            "model": "llama-3.1-sonar-small-128k-online",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a music industry research assistant. Provide factual, current information about artists and music news.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            "max_tokens": 200,
-            "temperature": 0.3,
-        }
+        prompt = (
+            f"Research the latest news about {artist} and {topic}. "
+            "Provide 2-3 key facts or developments that would be interesting "
+            "to music fans. Keep it concise and factual."
+        )
 
         try:
-            response = requests.post(
-                PERPLEXITY_URL, headers=headers, json=data, timeout=30
+            result = _perplexity_client.chat.completions.create(
+                model="sonar",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a music industry research assistant. "
+                            "Provide factual, current information about "
+                            "artists and music news."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=200,
+                temperature=0.3,
             )
-            response.raise_for_status()
-            result = response.json()
-            research = result["choices"][0]["message"]["content"].strip()
-            return research
+            research = result.choices[0].message.content.strip()
+            return self._clean_perplexity_text(research)
         except Exception as e:
             print(f"  ⚠ Perplexity research error: {e}")
             return ""
@@ -299,13 +351,12 @@ Summary (60 words max):"""
     def generate_cta_headline(
         self, original_title: str, content: str, artist: str
     ) -> str:
-        """Generate high-converting CTA headline that's not copy-paste"""
-        if not PERPLEXITY_API_KEY:
-            # Fallback: transform original title
+        """Generate high-converting CTA headline using Perplexity SDK"""
+        if not _perplexity_client:
             return self._transform_title_fallback(original_title)
 
         prompt = f"""Create an engaging, click-worthy headline for this music news story.
-        
+
 Original Title: {original_title}
 Artist: {artist}
 Content Summary: {content[:500]}
@@ -317,6 +368,7 @@ Requirements:
 - Keep under 80 characters
 - Make it punchy and shareable
 - Avoid clickbait that doesn't deliver
+- Return ONLY the headline text, no markdown or citations
 
 Examples of good CTA headlines:
 - "Breaking: [Artist] Just Dropped Something Huge"
@@ -326,34 +378,32 @@ Examples of good CTA headlines:
 
 New CTA Headline:"""
 
-        headers = {
-            "Authorization": f"Bearer {PERPLEXITY_API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        data = {
-            "model": "llama-3.1-sonar-small-128k-online",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a viral headline writer for a music news app. Create headlines that get clicks while staying authentic to the story.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            "max_tokens": 100,
-            "temperature": 0.8,
-        }
-
         try:
-            response = requests.post(
-                PERPLEXITY_URL, headers=headers, json=data, timeout=30
+            result = _perplexity_client.chat.completions.create(
+                model="sonar",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": (
+                            "You are a viral headline writer for a music news app. "
+                            "Create headlines that get clicks while staying authentic "
+                            "to the story. Return ONLY the headline, no markdown "
+                            "formatting, no citations, no brackets."
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                max_tokens=100,
+                temperature=0.8,
             )
-            response.raise_for_status()
-            result = response.json()
-            headline = result["choices"][0]["message"]["content"].strip()
+            headline = result.choices[0].message.content.strip()
+            headline = self._clean_perplexity_text(headline)
 
-            # Clean up quotes if present
-            headline = headline.strip("\"'")
+            # Guard against model refusals / meta-commentary
+            refusal_prefixes = ("i appreciate", "i need to", "i can't", "as an ai")
+            if headline.lower().startswith(refusal_prefixes):
+                print("  ⚠ Perplexity refused headline, using fallback")
+                return self._transform_title_fallback(original_title)
 
             # Ensure it's not too long
             if len(headline) > 100:
@@ -478,7 +528,9 @@ New CTA Headline:"""
         while True:
             try:
                 token_param = f"&pageToken={page_token}" if page_token else ""
-                url = f"{FIRESTORE_URL}/articles?key={API_KEY}&pageSize=200{token_param}"
+                url = (
+                    f"{FIRESTORE_URL}/articles?key={API_KEY}&pageSize=200{token_param}"
+                )
                 response = self.session.get(url, timeout=15)
                 if response.status_code != 200:
                     print(f"  ⚠ Could not warm duplicate index: {response.status_code}")
@@ -529,6 +581,31 @@ New CTA Headline:"""
             article_dict["published_at"] = article.published_at.isoformat()
             article_dict["fetched_at"] = article.fetched_at.isoformat()
 
+            # Remove 'id' — Firestore rules only allow the 16 content fields.
+            # The document ID is set via the URL path, not as a field.
+            article_dict.pop("id", None)
+
+            # Enforce Firestore rule constraints so writes aren't rejected.
+            # source_url must start with https://
+            if not article_dict.get("source_url", "").startswith("https://"):
+                article_dict["source_url"] = article_dict["source_url"].replace(
+                    "http://", "https://", 1
+                )
+
+            # title: max 200 chars
+            if len(article_dict.get("title", "")) > 200:
+                article_dict["title"] = article_dict["title"][:197] + "..."
+
+            # summary: max 1000 chars
+            if len(article_dict.get("summary", "")) > 1000:
+                article_dict["summary"] = article_dict["summary"][:997] + "..."
+
+            # full_content: max 4000 chars
+            if len(article_dict.get("full_content", "")) > 4000:
+                article_dict["full_content"] = (
+                    article_dict["full_content"][:3997] + "..."
+                )
+
             canonical_url = self._normalize_url(article.source_url)
             doc_id = hashlib.md5(canonical_url.encode("utf-8")).hexdigest()[:32]
 
@@ -544,7 +621,12 @@ New CTA Headline:"""
                 self.existing_titles.add((article.title or "").lower().strip())
                 return True
             else:
-                print(f"  ✗ Failed to save: {response.status_code}")
+                detail = ""
+                try:
+                    detail = response.json().get("error", {}).get("message", "")
+                except Exception:
+                    detail = response.text[:200]
+                print(f"  ✗ Failed to save: {response.status_code} — {detail}")
                 return False
         except Exception as e:
             print(f"  ✗ Error saving to Firebase: {e}")
@@ -564,9 +646,13 @@ New CTA Headline:"""
         if items:
             newest = self.parse_pub_date(items[0].get("pub_date", ""))
             oldest = self.parse_pub_date(items[-1].get("pub_date", ""))
-            print(f"  Feed window: newest={newest.isoformat()} oldest={oldest.isoformat()}")
+            print(
+                f"  Feed window: newest={newest.isoformat()} oldest={oldest.isoformat()}"
+            )
 
         processed = 0
+        duplicates = 0
+        errors = 0
         for item in items[:12]:
             try:
                 original_title = item["title"]
@@ -574,6 +660,7 @@ New CTA Headline:"""
 
                 # Check duplicates before expensive model calls
                 if self.check_duplicate(original_title, item["link"]):
+                    duplicates += 1
                     print(f"  ⚠ Duplicate: {original_title[:50]}...")
                     continue
 
@@ -587,13 +674,13 @@ New CTA Headline:"""
                     original_title, content, main_artist
                 )
 
-                # Research with Perplexity for additional insights
+                # Research with Exa (falls back to Perplexity)
                 research = ""
-                if main_artist and PERPLEXITY_API_KEY:
-                    print(f"  🔍 Researching with Perplexity...")
-                    # Extract topic from title
+                if main_artist and (_exa_client or _perplexity_client):
+                    provider = "Exa" if _exa_client else "Perplexity"
+                    print(f"  🔍 Researching with {provider}...")
                     topic = original_title.replace(main_artist, "").strip()
-                    research = self.research_with_perplexity(main_artist, topic)
+                    research = self.research_with_exa(main_artist, topic)
 
                 # Summarize with DeepSeek (including research if available)
                 content_with_research = content
@@ -630,14 +717,261 @@ New CTA Headline:"""
                 )
 
                 if self.save_to_firebase(article):
-                    print(f"  ✓ Saved: {cta_title[:60]}...")
                     processed += 1
 
             except Exception as e:
+                errors += 1
                 print(f"  ✗ Error processing item: {e}")
                 continue
 
+        attempted = min(len(items), 12)
+        print(
+            f"  [{source_name}] items={len(items)} attempted={attempted} "
+            f"saved={processed} duplicates={duplicates} errors={errors}"
+        )
         return processed, len(items)
+
+    # ------------------------------------------------------------------
+    # Exa news discovery
+    # ------------------------------------------------------------------
+
+    EXA_QUERIES = [
+        "latest hip hop rap music news today",
+        "new pop music releases albums today",
+        "rock alternative music news today",
+        "electronic EDM music news today",
+        "gospel christian music news today",
+    ]
+
+    def _discover_perplexity_fallback(self) -> Tuple[int, int]:
+        """Fallback discovery using Perplexity when Exa is unavailable."""
+        if not _perplexity_client:
+            print("  ⚠ Neither Exa nor Perplexity available for discovery.")
+            return 0, 0
+
+        print("\n🔎 Discovering articles via Perplexity (Exa fallback)...")
+        items: List[Dict] = []
+
+        for query in self.EXA_QUERIES:
+            prompt = (
+                f"Find 3 recent music news articles about: {query}. "
+                "For each article, provide ONLY a JSON array with objects "
+                'having keys "title", "url", "summary". '
+                "No other text, just the JSON array."
+            )
+            try:
+                result = _perplexity_client.chat.completions.create(
+                    model="sonar",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a music news researcher. Return ONLY "
+                                "valid JSON arrays, no markdown, no explanation."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=600,
+                    temperature=0.3,
+                )
+                raw = result.choices[0].message.content.strip()
+                # Strip markdown code fences if present
+                raw = re.sub(r"^```(?:json)?\s*", "", raw)
+                raw = re.sub(r"\s*```$", "", raw)
+                articles = json.loads(raw)
+                for a in articles:
+                    title = a.get("title", "").strip()
+                    url = a.get("url", "").strip()
+                    summary = a.get("summary", "").strip()
+                    if title and url and url.startswith("http"):
+                        items.append(
+                            {
+                                "title": title,
+                                "link": url,
+                                "description": summary[:500],
+                                "content": summary,
+                                "pub_date": "",
+                                "image": None,
+                            }
+                        )
+            except Exception as e:
+                print(f"  ⚠ Perplexity discovery error ({query[:30]}...): {e}")
+
+        print(f"  Found {len(items)} Perplexity discovery results")
+
+        processed = 0
+        duplicates = 0
+        errors = 0
+
+        for item in items:
+            try:
+                original_title = item["title"]
+                content = item["content"] or item["description"]
+
+                if self.check_duplicate(original_title, item["link"]):
+                    duplicates += 1
+                    continue
+
+                artists = self.extract_artists(original_title, content)
+                main_artist = artists[0] if artists else ""
+
+                print(f"  📝 Generating CTA headline...")
+                cta_title = self.generate_cta_headline(
+                    original_title, content, main_artist
+                )
+
+                summary = self.summarize_with_deepseek(cta_title, content)
+
+                primary_genre, secondary_genres = self.classify_genre(
+                    original_title, content, "mixed"
+                )
+
+                pub_date = self.parse_pub_date(item.get("pub_date", ""))
+
+                article = Article(
+                    id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
+                    title=cta_title,
+                    summary=summary,
+                    full_content=content[:2000],
+                    source="Perplexity Discovery",
+                    source_url=item["link"],
+                    primary_genre=primary_genre,
+                    secondary_genres=secondary_genres,
+                    artist_names=artists,
+                    image_url=item["image"]
+                    or "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800",
+                    published_at=pub_date,
+                    read_time=60,
+                    share_count=0,
+                    email_count=0,
+                    bookmark_count=0,
+                    view_count=0,
+                    fetched_at=datetime.now(),
+                )
+
+                if self.save_to_firebase(article):
+                    processed += 1
+
+            except Exception as e:
+                errors += 1
+                print(f"  ✗ Error processing Perplexity item: {e}")
+                continue
+
+        print(
+            f"  [perplexity_discovery] items={len(items)} "
+            f"saved={processed} duplicates={duplicates} errors={errors}"
+        )
+        return processed, len(items)
+
+    def discover_exa_articles(self) -> Tuple[int, int]:
+        """Discover fresh music news via Exa search and process them.
+        Falls back to Perplexity-based discovery when Exa is unavailable."""
+        if not _exa_client:
+            return self._discover_perplexity_fallback()
+
+        print("\n🔎 Discovering articles via Exa...")
+        items: List[Dict] = []
+
+        for query in self.EXA_QUERIES:
+            try:
+                result = _exa_client.search(
+                    query,
+                    type="auto",
+                    num_results=5,
+                    contents={"text": {"max_characters": 2000}},
+                )
+                for r in result.results:
+                    if not r.url or not r.title:
+                        continue
+                    text = re.sub(r"<[^>]+>", "", r.text or "").strip()
+                    text = re.sub(r"\s+", " ", text)
+                    items.append(
+                        {
+                            "title": r.title.strip(),
+                            "link": r.url,
+                            "description": text[:500],
+                            "content": text,
+                            "pub_date": "",
+                            "image": None,
+                        }
+                    )
+            except Exception as e:
+                print(f"  ⚠ Exa query error ({query[:30]}...): {e}")
+
+        print(f"  Found {len(items)} Exa results")
+
+        if not items:
+            print("  Exa returned no results, falling back to Perplexity...")
+            return self._discover_perplexity_fallback()
+
+        processed = 0
+        duplicates = 0
+        errors = 0
+
+        for item in items:
+            try:
+                original_title = item["title"]
+                content = item["content"] or item["description"]
+
+                if self.check_duplicate(original_title, item["link"]):
+                    duplicates += 1
+                    continue
+
+                artists = self.extract_artists(original_title, content)
+                main_artist = artists[0] if artists else ""
+
+                print(f"  📝 Generating CTA headline...")
+                cta_title = self.generate_cta_headline(
+                    original_title, content, main_artist
+                )
+
+                summary = self.summarize_with_deepseek(cta_title, content)
+
+                primary_genre, secondary_genres = self.classify_genre(
+                    original_title, content, "mixed"
+                )
+
+                pub_date = self.parse_pub_date(item.get("pub_date", ""))
+
+                article = Article(
+                    id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
+                    title=cta_title,
+                    summary=summary,
+                    full_content=content[:2000],
+                    source="Exa Discovery",
+                    source_url=item["link"],
+                    primary_genre=primary_genre,
+                    secondary_genres=secondary_genres,
+                    artist_names=artists,
+                    image_url=item["image"]
+                    or "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800",
+                    published_at=pub_date,
+                    read_time=60,
+                    share_count=0,
+                    email_count=0,
+                    bookmark_count=0,
+                    view_count=0,
+                    fetched_at=datetime.now(),
+                )
+
+                if self.save_to_firebase(article):
+                    processed += 1
+
+            except Exception as e:
+                errors += 1
+                print(f"  ✗ Error processing Exa item: {e}")
+                continue
+
+        print(
+            f"  [exa_discovery] items={len(items)} "
+            f"saved={processed} duplicates={duplicates} errors={errors}"
+        )
+        return processed, len(items)
+
+    # ------------------------------------------------------------------
+    # Main run
+    # ------------------------------------------------------------------
 
     def run(self):
         """Run the scraper for all sources"""
@@ -651,8 +985,14 @@ New CTA Headline:"""
             print("⚠️  Warning: FIREBASE_API_KEY not set. Articles won't be saved.")
             print()
 
-        if not OPENROUTER_API_KEY:
-            print("⚠️  Warning: OPENROUTER_API_KEY not set. Using basic summaries.")
+        if not _perplexity_client:
+            print("⚠️  Warning: Perplexity SDK not available. Using fallback headlines.")
+            print()
+
+        if not _exa_client:
+            print(
+                "⚠️  Warning: Exa SDK not available. Will use Perplexity for discovery."
+            )
             print()
 
         total_processed = 0
@@ -660,6 +1000,7 @@ New CTA Headline:"""
 
         self.load_existing_articles()
 
+        # 1. RSS feeds
         for source_name, config in RSS_SOURCES.items():
             try:
                 processed, fetched_items = self.process_feed(source_name, config)
@@ -668,6 +1009,14 @@ New CTA Headline:"""
             except Exception as e:
                 print(f"  ✗ Error with {source_name}: {e}")
                 continue
+
+        # 2. Exa news discovery
+        try:
+            exa_processed, exa_items = self.discover_exa_articles()
+            total_processed += exa_processed
+            total_fetched_items += exa_items
+        except Exception as e:
+            print(f"  ✗ Error with Exa discovery: {e}")
 
         print("\n" + "=" * 50)
         print(f"Fetched {total_fetched_items} feed items")
