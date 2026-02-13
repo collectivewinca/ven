@@ -15,6 +15,7 @@ import os
 import sys
 import hashlib
 from urllib.parse import urlsplit, urlunsplit
+from email.utils import parsedate_to_datetime
 
 # Load environment variables
 try:
@@ -147,6 +148,18 @@ class RSSScraper:
         except Exception as e:
             print(f"  ✗ Error fetching RSS from {url}: {e}")
             return []
+
+    def parse_pub_date(self, value: str) -> datetime:
+        """Parse RSS publication dates safely, fallback to now."""
+        try:
+            if not value:
+                raise ValueError("missing pub_date")
+            dt = parsedate_to_datetime(value)
+            if dt is None:
+                raise ValueError("unparseable pub_date")
+            return dt
+        except Exception:
+            return datetime.now()
 
     def _get_text(self, element, tag: str) -> str:
         """Safely get text from XML element"""
@@ -543,6 +556,15 @@ New CTA Headline:"""
 
         items = self.fetch_rss_feed(source_config["url"])
         print(f"  Found {len(items)} items")
+        items = sorted(
+            items,
+            key=lambda item: self.parse_pub_date(item.get("pub_date", "")),
+            reverse=True,
+        )
+        if items:
+            newest = self.parse_pub_date(items[0].get("pub_date", ""))
+            oldest = self.parse_pub_date(items[-1].get("pub_date", ""))
+            print(f"  Feed window: newest={newest.isoformat()} oldest={oldest.isoformat()}")
 
         processed = 0
         for item in items[:12]:
@@ -584,12 +606,7 @@ New CTA Headline:"""
                     original_title, content, source_config["genre"]
                 )
 
-                try:
-                    pub_date = datetime.strptime(
-                        item["pub_date"], "%a, %d %b %Y %H:%M:%S %z"
-                    )
-                except:
-                    pub_date = datetime.now()
+                pub_date = self.parse_pub_date(item.get("pub_date", ""))
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
