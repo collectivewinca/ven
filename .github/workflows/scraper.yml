@@ -35,7 +35,45 @@ jobs:
       run: |
         cd scraper
         python3 rss_scraper.py
-    
+
+    - name: Verify freshness window
+      env:
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+      run: |
+        python3 - <<'PY'
+        import json
+        import os
+        from datetime import datetime, timezone, timedelta
+        from urllib.request import urlopen
+
+        key = os.environ.get("FIREBASE_API_KEY", "")
+        url = "https://firestore.googleapis.com/v1/projects/miny-ven/databases/(default)/documents/articles?key=" + key + "&pageSize=200"
+        payload = json.load(urlopen(url))
+        docs = payload.get("documents", [])
+        if not docs:
+            raise SystemExit("No articles found in Firestore after scraper run")
+
+        newest = None
+        for doc in docs:
+            ts = doc.get("fields", {}).get("fetched_at", {}).get("stringValue")
+            if not ts:
+                continue
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            if newest is None or dt > newest:
+                newest = dt
+
+        if newest is None:
+            raise SystemExit("No fetched_at timestamps present in Firestore")
+
+        age = datetime.now(timezone.utc) - newest
+        print(f"Newest fetched_at: {newest.isoformat()}")
+        print(f"Age: {age}")
+        if age > timedelta(hours=24):
+            raise SystemExit(f"Data is stale (>24h). Latest fetched_at: {newest.isoformat()}")
+        PY
+
     - name: Report status
       if: always()
       run: |

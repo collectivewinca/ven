@@ -7,13 +7,14 @@ Uses REST API instead of firebase_admin
 
 import xml.etree.ElementTree as ET
 import requests
-import json
 import re
-from datetime import datetime, timedelta
-from typing import Optional, Dict, List
+from datetime import datetime
+from typing import Optional, Dict, List, Set, Tuple
 from dataclasses import dataclass, asdict
 import os
-from pathlib import Path
+import sys
+import hashlib
+from urllib.parse import urlsplit, urlunsplit
 
 # Load environment variables
 try:
@@ -112,12 +113,14 @@ class Article:
 
 class RSSScraper:
     def __init__(self):
-        pass
+        self.existing_source_urls: Set[str] = set()
+        self.existing_titles: Set[str] = set()
+        self.session = requests.Session()
 
     def fetch_rss_feed(self, url: str) -> List[Dict]:
         """Fetch and parse RSS feed"""
         try:
-            response = requests.get(
+            response = self.session.get(
                 url,
                 timeout=30,
                 headers={"User-Agent": "Mozilla/5.0 (compatible; miny-ven-bot/1.0)"},
@@ -440,71 +443,66 @@ New CTA Headline:"""
                 fields[key] = {"nullValue": None}
         return fields
 
-    def check_duplicate(self, title: str) -> bool:
-        """Check if article already exists in Firestore using fuzzy matching"""
+    def _normalize_url(self, url: str) -> str:
+        """Canonicalize URL for reliable duplicate detection."""
         try:
-            # Fetch all articles and check titles
-            url = f"{FIRESTORE_URL}/articles?key={API_KEY}"
-            response = requests.get(url, timeout=10)
+            parts = urlsplit((url or "").strip())
+            netloc = parts.netloc.lower()
+            path = re.sub(r"/+$", "", parts.path or "")
+            return urlunsplit((parts.scheme.lower(), netloc, path, "", ""))
+        except Exception:
+            return (url or "").strip()
 
-            if response.status_code != 200:
-                return False
+    def load_existing_articles(self):
+        """Warm duplicate indexes from Firestore."""
+        if not API_KEY:
+            return
 
-            data = response.json()
-            if not data.get("documents"):
-                return False
+        self.existing_source_urls.clear()
+        self.existing_titles.clear()
+        page_token = ""
 
-            # Normalize the new title
-            normalized = title.lower().strip()
+        while True:
+            try:
+                token_param = f"&pageToken={page_token}" if page_token else ""
+                url = f"{FIRESTORE_URL}/articles?key={API_KEY}&pageSize=200{token_param}"
+                response = self.session.get(url, timeout=15)
+                if response.status_code != 200:
+                    print(f"  ⚠ Could not warm duplicate index: {response.status_code}")
+                    return
 
-            # Extract key words (remove common words like "the", "a", "to", etc.)
-            def extract_key_words(text):
-                common_words = {
-                    "the",
-                    "a",
-                    "an",
-                    "to",
-                    "for",
-                    "of",
-                    "in",
-                    "on",
-                    "at",
-                    "with",
-                    "and",
-                    "is",
-                    "are",
-                    "was",
-                    "were",
-                }
-                words = text.lower().strip().split()
-                return set(w for w in words if w not in common_words and len(w) > 2)
+                data = response.json()
+                for doc in data.get("documents", []):
+                    fields = doc.get("fields", {})
+                    source_url = fields.get("source_url", {}).get("stringValue", "")
+                    title = fields.get("title", {}).get("stringValue", "")
+                    if source_url:
+                        self.existing_source_urls.add(self._normalize_url(source_url))
+                    if title:
+                        self.existing_titles.add(title.lower().strip())
 
-            new_key_words = extract_key_words(title)
+                page_token = data.get("nextPageToken", "")
+                if not page_token:
+                    break
+            except Exception as e:
+                print(f"  ⚠ Error warming duplicate index: {e}")
+                return
 
-            for doc in data["documents"]:
-                fields = doc.get("fields", {})
-                existing_title = (
-                    fields.get("title", {}).get("stringValue", "").lower().strip()
-                )
+        print(
+            f"Loaded duplicate index: {len(self.existing_source_urls)} URLs, {len(self.existing_titles)} titles"
+        )
 
-                # Check for exact match
-                if existing_title == normalized:
-                    return True
+    def check_duplicate(self, title: str, source_url: str) -> bool:
+        """Check duplicates primarily via canonical source URL."""
+        try:
+            normalized_title = (title or "").lower().strip()
+            normalized_url = self._normalize_url(source_url)
 
-                # Check for high similarity (if key words overlap significantly)
-                existing_key_words = extract_key_words(existing_title)
-                if new_key_words and existing_key_words:
-                    # Calculate Jaccard similarity
-                    intersection = len(new_key_words & existing_key_words)
-                    union = len(new_key_words | existing_key_words)
-                    if union > 0:
-                        similarity = intersection / union
-                        # If 80% or more key words match, consider it a duplicate
-                        if similarity >= 0.8:
-                            print(
-                                f"  ⚠ Similar title detected ({similarity:.0%} match): {existing_title[:50]}..."
-                            )
-                            return True
+            if normalized_url and normalized_url in self.existing_source_urls:
+                return True
+
+            if normalized_title and normalized_title in self.existing_titles:
+                return True
 
             return False
         except Exception as e:
@@ -518,7 +516,8 @@ New CTA Headline:"""
             article_dict["published_at"] = article.published_at.isoformat()
             article_dict["fetched_at"] = article.fetched_at.isoformat()
 
-            doc_id = re.sub(r"[^a-zA-Z0-9]", "-", article.title.lower())[:50]
+            canonical_url = self._normalize_url(article.source_url)
+            doc_id = hashlib.md5(canonical_url.encode("utf-8")).hexdigest()[:32]
 
             url = f"{FIRESTORE_URL}/articles/{doc_id}?key={API_KEY}"
             payload = {"fields": self.convert_to_firestore_fields(article_dict)}
@@ -527,6 +526,9 @@ New CTA Headline:"""
 
             if response.status_code in [200, 201]:
                 print(f"  ✓ Saved: {article.title[:60]}...")
+                if canonical_url:
+                    self.existing_source_urls.add(canonical_url)
+                self.existing_titles.add((article.title or "").lower().strip())
                 return True
             else:
                 print(f"  ✗ Failed to save: {response.status_code}")
@@ -535,7 +537,7 @@ New CTA Headline:"""
             print(f"  ✗ Error saving to Firebase: {e}")
             return False
 
-    def process_feed(self, source_name: str, source_config: Dict):
+    def process_feed(self, source_name: str, source_config: Dict) -> Tuple[int, int]:
         """Process a single RSS feed with CTA headlines and Perplexity research"""
         print(f"\n📡 Fetching {source_name}...")
 
@@ -543,13 +545,13 @@ New CTA Headline:"""
         print(f"  Found {len(items)} items")
 
         processed = 0
-        for item in items[:5]:  # Process top 5 items per feed
+        for item in items[:12]:
             try:
                 original_title = item["title"]
                 content = item["content"] or item["description"]
 
-                # Check for duplicate using original title
-                if self.check_duplicate(original_title):
+                # Check duplicates before expensive model calls
+                if self.check_duplicate(original_title, item["link"]):
                     print(f"  ⚠ Duplicate: {original_title[:50]}...")
                     continue
 
@@ -618,7 +620,7 @@ New CTA Headline:"""
                 print(f"  ✗ Error processing item: {e}")
                 continue
 
-        return processed
+        return processed, len(items)
 
     def run(self):
         """Run the scraper for all sources"""
@@ -637,20 +639,32 @@ New CTA Headline:"""
             print()
 
         total_processed = 0
+        total_fetched_items = 0
+
+        self.load_existing_articles()
 
         for source_name, config in RSS_SOURCES.items():
             try:
-                processed = self.process_feed(source_name, config)
+                processed, fetched_items = self.process_feed(source_name, config)
                 total_processed += processed
+                total_fetched_items += fetched_items
             except Exception as e:
                 print(f"  ✗ Error with {source_name}: {e}")
                 continue
 
         print("\n" + "=" * 50)
+        print(f"Fetched {total_fetched_items} feed items")
         print(f"✅ Complete! Added {total_processed} new articles")
         print(f"Finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
+        if total_fetched_items == 0:
+            raise RuntimeError("All RSS feeds returned zero items.")
+
 
 if __name__ == "__main__":
-    scraper = RSSScraper()
-    scraper.run()
+    try:
+        scraper = RSSScraper()
+        scraper.run()
+    except Exception as exc:
+        print(f"❌ Scraper failed: {exc}")
+        sys.exit(1)
