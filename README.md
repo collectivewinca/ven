@@ -1,144 +1,169 @@
 # miny-ven
 
-60-word music news PWA for creators - Gospel, Hip-Hop, Pop, Rock, Electronic
+60-word music news PWA for creators — Gospel, Hip-Hop, Pop, Rock, Electronic
 
-## 🎵 Live Demo
+## Live
 
-**https://minyven-news.vercel.app**
+- **App**: https://ven.minyvinyl.com
+- **Aliases**: https://minyven-news.vercel.app / https://miny-ven.vercel.app
 
-## 📝 Latest Updates (2026-02-13)
+## Features
 
-- Deployed latest production build via Vercel CLI.
-- Fixed frontend fallback so local app can fetch Firestore data without a fully populated local `.env`.
-- Updated scraper duplicate handling to prioritize canonical `source_url`.
-- Increased feed intake and sorted RSS items by `pubDate` before processing.
-- Added workflow preflight Firestore check and freshness guard (`fetched_at` must be within 24h).
-- Current blocker: scraper workflow runs complete but Firestore data remains stale after `2026-02-11`.
+- **60-Word Summaries** — DeepSeek AI condenses every article to exactly 60 words
+- **5 Balanced Genres** — Gospel, Hip-Hop, Pop, Rock, Electronic
+- **Dual Discovery** — 5 RSS feeds + Exa AI search across genre queries
+- **CTA Headlines** — Perplexity SDK rewrites titles into click-worthy headlines
+- **Smart Dedup** — Jaccard similarity (80% threshold) + URL canonicalization
+- **Refusal Guard** — regex filter catches AI meta-commentary before it reaches the DB
+- **Bookmarks** — click any title to save locally (localStorage)
+- **Text Link (Quo API)** — send article links via SMS
+- **Swipe Navigation** — mobile-optimized gesture browsing
+- **Pull to Refresh** — swipe down for fresh content
+- **PWA Ready** — installable on mobile devices
 
-## ✨ Features
+## Architecture
 
-- **60-Word Summaries**: AI-powered concise music news using DeepSeek API
-- **5 Balanced Genres**: Gospel, Hip-Hop, Pop, Rock, Electronic
-- **Smart Duplicate Detection**: Fuzzy matching (80% similarity) prevents duplicates
-- **Real-Time Updates**: 35+ articles from RSS feeds (hourly auto-refresh)
-- **Bookmarks**: Click title to save articles locally
-- **Text Link (Quo API)**: Send article links via SMS from the app
-- **Swipe Navigation**: Mobile-optimized swipe to browse
-- **Pull to Refresh**: Easy content updates
-- **PWA Ready**: Installable on mobile devices
-
-## 🏗️ Architecture
+```
+                          hourly cron
+                              |
+                    +---------v----------+
+                    | GitHub Actions CI  |
+                    |  scraper.yml       |
+                    +---------+----------+
+                              |
+                    +---------v----------+
+                    | rss_scraper.py     |
+                    |                    |
+                    |  1. RSS feeds (5)  |
+                    |  2. Exa discovery  |
+                    |  3. Perplexity CTA |
+                    |  4. DeepSeek 60w   |
+                    +---------+----------+
+                              |
+                    +---------v----------+
+                    | Firestore REST API |
+                    | (constrained write)|
+                    +---------+----------+
+                              |
+                    +---------v----------+
+                    | React + Vite PWA   |
+                    | (Vercel hosting)   |
+                    +--------------------+
+```
 
 ### Frontend
-- **Framework**: React 18 + TypeScript
-- **Styling**: Tailwind CSS with custom glass-morphism design
-- **Build Tool**: Vite
+- **Framework**: React 18 + TypeScript + Vite
+- **Styling**: Tailwind CSS with glass-morphism design
 - **Data**: REST API calls to Firebase Firestore
-- **UI**: Genre badges and source on image, clickable titles
+- **Hosting**: Vercel (manual deploy via `vercel --prod`)
 
-### Backend
+### Scraper Pipeline
 - **Language**: Python 3.11+
-- **RSS Scraping**: Jesusfreakhideout, Pitchfork, Rolling Stone, Billboard
-- **AI Summarization**: DeepSeek API (60-word summaries)
-- **Database**: Firebase Firestore (REST API)
-- **Automation**: GitHub Actions cron job (hourly)
+- **RSS Sources**: Jesusfreakhideout, Pitchfork News, Pitchfork Reviews, Rolling Stone, Billboard
+- **Exa Discovery**: 5 genre queries x 5 results — finds articles beyond RSS feeds
+- **Perplexity SDK** (`sonar` model): generates CTA headlines, article research (Exa fallback)
+- **DeepSeek API** (`deepseek-chat`): 60-word summaries
+- **Firestore REST API**: unauthenticated constrained writes (16 fields, strict validation)
+- **Automation**: GitHub Actions hourly cron + manual dispatch
 
-## 🚀 Quick Start
+### AI Fallback Chain
+| Step | Primary | Fallback |
+| --- | --- | --- |
+| News discovery | Exa search | Perplexity `sonar` |
+| Article research | Exa content extraction | Perplexity `sonar` |
+| CTA headlines | Perplexity `sonar` | Regex title transform |
+| 60-word summaries | DeepSeek `deepseek-chat` | First 60 words of content |
+
+If any AI response triggers the refusal guard (meta-commentary like "I notice...", "As an AI..."), the pipeline falls back to the next level automatically.
+
+## Quick Start
 
 ### Prerequisites
-- Node.js 18+ 
+- Node.js 18+
 - Python 3.11+
 - Firebase project
 
-### 1. Clone Repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/collectivewinca/miny-ven.git
 cd miny-ven
 ```
 
-### 2. Frontend Setup
+### 2. Frontend
 
 ```bash
-# Install dependencies
 npm install
-
-# Create environment file
 cp .env.example .env
-
-# Add your Firebase credentials to .env
-npm run build
+# Add Firebase credentials to .env
 npm run dev
 ```
 
-### 3. Scraper Setup
+### 3. Scraper
 
 ```bash
 cd scraper
 pip install -r requirements.txt
-
-# Add API keys to .env
 cp .env.example .env
-```
-
-### 4. Run Scraper Manually
-
-```bash
-cd scraper
+# Add API keys to .env
 python3 rss_scraper.py
 ```
 
-### 5. Clean Up Duplicates
-
-```bash
-cd scraper
-python3 cleanup_duplicates.py
-```
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 miny-ven/
-├── .github/workflows/         # GitHub Actions automation
-│   └── scraper.yml            # Hourly RSS scraper
-├── scraper/                   # Python backend
-│   ├── rss_scraper.py         # Main scraper with fuzzy duplicates
-│   ├── cleanup_duplicates.py  # Remove duplicate articles
+├── .github/workflows/
+│   └── scraper.yml            # Hourly cron + preflight + freshness guard
+├── scraper/
+│   ├── rss_scraper.py         # Main scraper (RSS + Exa + AI pipeline)
+│   ├── requirements.txt       # Python deps (perplexityai, exa_py, etc.)
+│   ├── cleanup_duplicates.py  # Remove duplicate articles from Firestore
 │   ├── seed_firebase_rest.py  # Initial data seeding
-│   └── .env                   # API keys
-├── src/                       # Frontend source
-│   ├── App.tsx               # Main app with bookmarks
-│   └── firebase.ts           # Firebase config
+│   └── .env.example           # Required API keys template
+├── src/
+│   ├── App.tsx                # Main React app with bookmarks + swipe
+│   └── firebase.ts            # Firebase config
 ├── api/
-│   └── quo-sms.js            # Server-side Quo SMS endpoint
-├── firestore.rules           # Database security rules
-└── firebase.json             # Firebase config
+│   └── quo-sms.js             # Vercel serverless SMS endpoint
+├── firestore.rules            # Strict 16-field schema validation
+├── firebase.json              # Firebase project config
+├── vercel.json                # Vercel deployment config
+└── README.md
 ```
 
-## 🔐 Environment Variables
+## Environment Variables
 
-### Frontend (.env)
+### Frontend (`.env`)
 ```bash
 VITE_FIREBASE_API_KEY=
 VITE_FIREBASE_AUTH_DOMAIN=miny-ven.firebaseapp.com
 VITE_FIREBASE_PROJECT_ID=miny-ven
 VITE_FIREBASE_STORAGE_BUCKET=miny-ven.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=1055083577389
-VITE_FIREBASE_APP_ID=1:1055083577389:web:xxx
-VITE_FIREBASE_MEASUREMENT_ID=G-xxx
-VITE_PUBLIC_APP_URL=https://miny-ven.vercel.app
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+VITE_FIREBASE_MEASUREMENT_ID=
+VITE_PUBLIC_APP_URL=https://ven.minyvinyl.com
 ```
 
-### Backend (scraper/.env)
+### Scraper (`scraper/.env`)
 ```bash
+FIREBASE_API_KEY=           # Firestore REST API key
 FIREBASE_PROJECT_ID=miny-ven
-FIREBASE_API_KEY=
-DEEPSEEK_API_KEY=
-OPENROUTER_API_KEY=
-PERPLEXITY_API_KEY=
+PERPLEXITY_API_KEY=         # CTA headlines + research fallback (model: sonar)
+DEEPSEEK_API_KEY=           # 60-word summaries (model: deepseek-chat)
+EXA_API_KEY=                # Article research + news discovery
 ```
 
-### Vercel Server Environment Variables (for Quo SMS API)
+### GitHub Actions Secrets
+```
+FIREBASE_API_KEY
+DEEPSEEK_API_KEY
+PERPLEXITY_API_KEY
+EXA_API_KEY
+```
+
+### Vercel (for Quo SMS API)
 ```bash
 QUO_API_URL=
 QUO_API_KEY=
@@ -147,80 +172,56 @@ QUO_AUTH_SCHEME=raw
 QUO_FROM=
 ```
 
-## 🔄 Automation (GitHub Actions)
+## GitHub Actions Workflow
 
-**Hourly RSS Scraper** runs automatically via GitHub Actions:
-- Checks 5 RSS sources every hour
-- Uses DeepSeek AI for 60-word summaries
-- Prevents duplicates with fuzzy matching (80% threshold)
-- Updates Firebase Firestore
+The `scraper.yml` workflow runs hourly and includes:
 
-**Manual trigger:**
-```bash
-gh workflow run scraper.yml
-```
-
-**Monitor runs:**
-```bash
-gh run list --workflow=scraper.yml
-```
-
-## 🎯 Current Status
-
-- **35 Articles** in database
-- **5 RSS Sources**: Jesusfreakhideout, Pitchfork News, Pitchfork Reviews, Rolling Stone, Billboard
-- **DeepSeek AI**: Summarizes to exactly 60 words
-- **No Duplicates**: Fuzzy matching prevents similar articles
-
-## 🔧 Key Features Explained
-
-### Duplicate Prevention
-The scraper uses **Jaccard similarity** to detect near-duplicate titles:
-- Extracts key words (removes "the", "a", "to", etc.)
-- Calculates 80% similarity threshold
-- Blocks articles like:
-  - "Adam Sandler Award for His Songwriting" vs "Adam Sandler Songwriting Award" → **Blocked**
-
-### Bookmarks
-- **Click article title** to bookmark/unbookmark
-- **Yellow bookmark icon** appears next to title when saved
-- **Bookmark button** in header shows count badge
-- Saved to browser localStorage
-
-### UI Layout
-- **Genre badge** (top-left of image): "Gospel", "Hip-Hop", etc.
-- **Source badge** (top-right of image): "Pitchfork", "Billboard", etc.
-- **Title**: Clickable to toggle bookmark
-- **16:9 Image**: Compact format for mobile
-
-## 🚢 Deployment
-
-### Vercel (Frontend)
-Already deployed: https://dist-bay-two-38.vercel.app
+1. **Preflight** — verifies Firestore is reachable before scraping
+2. **RSS Scraper** — fetches 5 feeds + Exa discovery + AI processing
+3. **Freshness Guard** — fails the run if newest `fetched_at` is older than 24h
+4. **Status Report** — logs total article count
 
 ```bash
-cd dist
-vercel --prod
+# Manual trigger
+gh workflow run "Hourly RSS Scraper"
+
+# Watch a run
+gh run list --workflow=scraper.yml --limit 5
+gh run watch <run-id>
+
+# View logs
+gh run view <run-id> --log
 ```
 
-### Firebase
-Firestore database with public reads and constrained writes:
-- Authenticated users can write/delete.
-- Unauthenticated scraper writes are limited to strict article schema + safe counters.
+## Firestore Rules
 
-## 📱 Recent Articles
+Unauthenticated scraper writes are constrained to:
+- Exactly 16 required fields (no `id` field in payload)
+- Strict type validation (string, int, list)
+- Title 1-200 chars, summary 1-1000 chars, content max 4000 chars
+- `source_url` must start with `https://`
+- Counter fields (`share_count`, `email_count`, `bookmark_count`) must be 0 on create
 
-- Piss in the Wind (Pitchfork Reviews)
-- Do You Still Love Me? (Pitchfork Reviews)
-- Bad Bunny's Super Bowl Performance (Rolling Stone)
-- Britney Spears Sells Catalog (Rolling Stone)
-- Adam Sandler ASCAP Award (Billboard)
-- Fireflight's Dawn Michele New Group (Jesusfreakhideout)
+Authenticated users have full read/write/delete access.
 
-## 📝 License
+## Changelog
 
-Private repository - All rights reserved
+### 2026-02-13
+- **Fixed**: Firestore 403 — removed `id` field from payload (rules enforce exactly 16 fields)
+- **Added**: Exa SDK integration for article research and news discovery (5 genre queries)
+- **Added**: Perplexity-based discovery fallback when Exa is unavailable
+- **Added**: Refusal guard — regex filter catches 15+ AI meta-commentary patterns
+- **Migrated**: Perplexity from raw HTTP to official SDK, model `sonar`
+- **Added**: `_clean_perplexity_text()` — strips markdown bold and citation brackets
+- **Updated**: GitHub Actions workflow — added `EXA_API_KEY`, removed `OPENROUTER_API_KEY`
+- **Deployed**: Vercel production at https://ven.minyvinyl.com
 
----
+### 2026-02-11
+- Initial scraper with RSS feeds + DeepSeek summaries
+- Firestore security rules with constrained writes
+- GitHub Actions hourly cron
+- PWA frontend with bookmarks, swipe, Quo SMS
 
-Built with ❤️ for music creators
+## License
+
+Private repository — All rights reserved
