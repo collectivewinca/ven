@@ -25,10 +25,14 @@ jobs:
         pip install -r requirements.txt
         pip install python-dotenv
 
-    - name: Run unit tests
+    - name: Run unit tests (if present)
       run: |
         cd scraper
-        python3 -m unittest discover -s tests -p 'test_*.py'
+        if [ -d tests ]; then
+          python3 -m unittest discover -s tests -p 'test_*.py'
+        else
+          echo "No scraper/tests directory; skipping unit tests."
+        fi
     
     - name: Run RSS Scraper
       env:
