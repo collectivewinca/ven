@@ -45,6 +45,34 @@ jobs:
     
     - name: Report status
       if: always()
+      env:
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
       run: |
         echo "Reddit scraper completed at $(date)"
-        echo "Total articles in database: $(curl -s 'https://firestore.googleapis.com/v1/projects/miny-ven/databases/(default)/documents/articles?key=${{ secrets.FIREBASE_API_KEY }}&pageSize=1' | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get(\"documents\", [{}])[0].get(\"name\", \"unknown\").split(\"/\")[-1] if data.get(\"documents\") else \"0\")' 2>/dev/null || echo 'unknown')"
+        total=$(python3 - <<'PY'
+        import json
+        import os
+        from urllib.parse import quote
+        from urllib.request import urlopen
+
+        key = os.environ.get("FIREBASE_API_KEY", "")
+        if not key:
+          print("unknown")
+          raise SystemExit(0)
+
+        base = f"https://firestore.googleapis.com/v1/projects/miny-ven/databases/(default)/documents/articles?key={key}&pageSize=200"
+        token = ""
+        count = 0
+
+        while True:
+          url = base + (f"&pageToken={quote(token)}" if token else "")
+          payload = json.load(urlopen(url))
+          count += len(payload.get("documents", []))
+          token = payload.get("nextPageToken", "")
+          if not token:
+            break
+
+        print(count)
+        PY
+        )
+        echo "Total articles in database: ${total}"
