@@ -24,6 +24,11 @@ jobs:
         cd scraper
         pip install -r requirements.txt
         pip install python-dotenv
+
+    - name: Run unit tests
+      run: |
+        cd scraper
+        python3 -m unittest discover -s tests -p 'test_*.py'
     
     - name: Run RSS Scraper
       env:

@@ -94,6 +94,78 @@ service cloud.firestore {
       allow delete: if request.auth != null;
     }
 
+    function hasOnlyAllowedScrapeRunFields() {
+      return request.resource.data.keys().hasOnly([
+        'run_id',
+        'version',
+        'started_at',
+        'finished_at',
+        'total_sources',
+        'sources_ok',
+        'sources_failed',
+        'total_processed',
+        'source_stats_json'
+      ]);
+    }
+
+    function hasRequiredScrapeRunFields() {
+      return request.resource.data.keys().hasAll([
+        'run_id',
+        'version',
+        'started_at',
+        'finished_at',
+        'total_sources',
+        'sources_ok',
+        'sources_failed',
+        'total_processed',
+        'source_stats_json'
+      ]);
+    }
+
+    function hasValidScrapeRunTypes() {
+      return request.resource.data.run_id is string &&
+        request.resource.data.version is string &&
+        request.resource.data.started_at is string &&
+        request.resource.data.finished_at is string &&
+        request.resource.data.total_sources is int &&
+        request.resource.data.sources_ok is int &&
+        request.resource.data.sources_failed is int &&
+        request.resource.data.total_processed is int &&
+        request.resource.data.source_stats_json is string;
+    }
+
+    function hasReasonableScrapeRunLimits() {
+      return request.resource.data.run_id.size() > 0 &&
+        request.resource.data.run_id.size() <= 64 &&
+        request.resource.data.version.size() > 0 &&
+        request.resource.data.version.size() <= 32 &&
+        request.resource.data.started_at.size() <= 64 &&
+        request.resource.data.finished_at.size() <= 64 &&
+        request.resource.data.total_sources >= 0 &&
+        request.resource.data.total_sources <= 50 &&
+        request.resource.data.sources_ok >= 0 &&
+        request.resource.data.sources_ok <= 50 &&
+        request.resource.data.sources_failed >= 0 &&
+        request.resource.data.sources_failed <= 50 &&
+        request.resource.data.total_processed >= 0 &&
+        request.resource.data.total_processed <= 1000 &&
+        request.resource.data.source_stats_json.size() <= 20000;
+    }
+
+    function isConstrainedScrapeRunWrite() {
+      return request.auth == null &&
+        hasRequiredScrapeRunFields() &&
+        hasOnlyAllowedScrapeRunFields() &&
+        hasValidScrapeRunTypes() &&
+        hasReasonableScrapeRunLimits();
+    }
+
+    match /scrape_runs/{runId} {
+      allow read: if true;
+      allow create, update: if request.auth != null || isConstrainedScrapeRunWrite();
+      allow delete: if request.auth != null;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

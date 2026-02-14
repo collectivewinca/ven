@@ -1,0 +1,50 @@
+name: Reddit Artist Discovery
+
+on:
+  schedule:
+    # Twice daily: 8am and 8pm UTC (3am/3pm ET, 12am/12pm PT)
+    - cron: '0 8,20 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scrape-reddit:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Set up Node.js (for hf CLI)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Install dependencies
+      run: |
+        # Install hf CLI globally
+        npm install -g hacker-feeds-cli
+        
+        # Install Python dependencies
+        cd scraper
+        pip install -r requirements.txt
+        pip install python-dotenv
+    
+    - name: Run Reddit Scraper
+      env:
+        FIREBASE_PROJECT_ID: miny-ven
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        # Note: Reddit scraper doesn't need AI API keys
+      run: |
+        cd scraper
+        python3 reddit_scraper.py
+    
+    - name: Report status
+      if: always()
+      run: |
+        echo "Reddit scraper completed at $(date)"
+        echo "Total articles in database: $(curl -s 'https://firestore.googleapis.com/v1/projects/miny-ven/databases/(default)/documents/articles?key=${{ secrets.FIREBASE_API_KEY }}&pageSize=1' | python3 -c 'import json,sys; data=json.load(sys.stdin); print(data.get(\"documents\", [{}])[0].get(\"name\", \"unknown\").split(\"/\")[-1] if data.get(\"documents\") else \"0\")' 2>/dev/null || echo 'unknown')"

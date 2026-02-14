@@ -12,6 +12,7 @@
 - **5 Balanced Genres**: Gospel, Hip-Hop, Pop, Rock, Electronic
 - **Smart Duplicate Detection**: Fuzzy matching (80% similarity) prevents duplicates
 - **Real-Time Updates**: 35+ articles from RSS feeds (hourly auto-refresh)
+- **Smart Image Pipeline**: RSS/media images, OpenGraph fallback, and intelligent SVG banners
 - **Bookmarks**: Click title to save articles locally
 - **Text Link (Quo API)**: Send article links via SMS from the app
 - **Swipe Navigation**: Mobile-optimized swipe to browse
@@ -127,6 +128,7 @@ FIREBASE_API_KEY=
 DEEPSEEK_API_KEY=
 OPENROUTER_API_KEY=
 PERPLEXITY_API_KEY=
+PUBLIC_APP_URL=https://minyven-news.vercel.app
 ```
 
 ### Vercel Server Environment Variables (for Quo SMS API)
@@ -155,6 +157,15 @@ gh workflow run scraper.yml
 ```bash
 gh run list --workflow=scraper.yml
 ```
+
+## ✅ CI (Web)
+
+PRs and pushes to `main` run:
+- `npm ci`
+- `npm run lint`
+- `npm run build`
+
+If you are changing the web app, run those locally before opening a PR.
 
 ## 🎯 Current Status
 
