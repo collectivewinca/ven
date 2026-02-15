@@ -10,6 +10,7 @@ import re
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Set
 import os
+from html import escape as html_escape
 from dataclasses import dataclass, asdict
 import requests
 from requests.adapters import HTTPAdapter
@@ -35,6 +36,14 @@ PUBLIC_APP_URL = (
 
 SCRAPER_VERSION = "2026-02-13-reddit"
 DEFAULT_TIMEOUT_SECONDS = 30
+
+
+def _safe_int(val, default=0):
+    """Safely convert a value to int, handling '1.2k' style strings"""
+    try:
+        return int(val)
+    except (ValueError, TypeError):
+        return default
 
 # Music subreddits to monitor
 MUSIC_SUBREDDITS = [
@@ -73,6 +82,34 @@ ARTIST_PATTERNS = [
     r"([A-Z][a-zA-Z\s&]+)\s+announces?\s+(?:new|upcoming)",
     r"([A-Z][a-zA-Z\s&]+)\s+releases?\s+(?:new|latest)",
 ]
+
+# Minimum upvotes required to consider a post for artist extraction
+MIN_VOTES_THRESHOLD = 10
+
+# Blocklist: common meta-post titles that are NOT artist names
+TITLE_BLOCKLIST = {
+    "daily discussion",
+    "daily music discussion",
+    "general discussion",
+    "top ten pop ten",
+    "teatime & trending topics",
+    "teatime &amp; trending topics",
+    "fresh finds friday",
+    "what have you been listening to",
+    "album of the year",
+    "song of the year",
+    "best of",
+    "weekly discussion",
+    "monthly discussion",
+    "sunday general discussion",
+    "saturday general discussion",
+    "friday general discussion",
+    "hype thursday",
+    "recommend if you like",
+    "roast my playlist",
+    "ama",
+    "announcement",
+}
 
 
 @dataclass
@@ -159,8 +196,8 @@ class RedditScraper:
                         title=current_post.get("title", ""),
                         url=current_post.get("url", ""),
                         subreddit=subreddit,
-                        votes=int(current_post.get("votes", 0)),
-                        comments=int(current_post.get("comments", 0)),
+                        votes=_safe_int(current_post.get("votes", 0)),
+                        comments=_safe_int(current_post.get("comments", 0)),
                         content="\n".join(content_lines).strip(),
                         published=datetime.now().isoformat(),
                     )
@@ -195,8 +232,8 @@ class RedditScraper:
                 title=current_post.get("title", ""),
                 url=current_post.get("url", ""),
                 subreddit=subreddit,
-                votes=int(current_post.get("votes", 0)),
-                comments=int(current_post.get("comments", 0)),
+                votes=_safe_int(current_post.get("votes", 0)),
+                comments=_safe_int(current_post.get("comments", 0)),
                 content="\n".join(content_lines).strip(),
                 published=datetime.now().isoformat(),
             )
@@ -212,6 +249,10 @@ class RedditScraper:
         seen_artists = set()
 
         for post in posts:
+            # Skip low-engagement posts (likely noise)
+            if post.votes < MIN_VOTES_THRESHOLD:
+                continue
+
             # Try to extract artist from title
             artist_name = self._extract_artist_from_title(post.title)
 
@@ -239,48 +280,50 @@ class RedditScraper:
 
     def _extract_artist_from_title(self, title: str) -> Optional[str]:
         """Extract artist name from Reddit post title"""
-        # Clean common prefixes
-        clean_title = title
+        # Remove ALL bracket tags (e.g. [FRESH], [LEAK], [ALBUM DISCUSSION], etc.)
+        clean_title = re.sub(r"\[[^\]]*\]", "", title).strip()
 
-        # Remove common prefixes
-        prefixes = [
-            r"\[FRESH\s+(?:ALBUM|EP|VIDEO|SINGLE|TRACK)\]",
-            r"\[FRESH\]",
-            r"\[DISCUSSION\]",
-            r"\[ORIGINAL\]",
-            r"\[OFFICIAL\]",
-            r"\[VIDEO\]",
-            r"\[ALBUM\]",
-            r"\[EP\]",
-            r"\[SINGLE\]",
-        ]
-
-        for prefix in prefixes:
-            clean_title = re.sub(prefix, "", clean_title, flags=re.IGNORECASE)
-
-        # Try pattern matching
+        # Try pattern matching first
         for pattern in ARTIST_PATTERNS:
             match = re.search(pattern, clean_title, re.IGNORECASE)
             if match:
                 artist = match.group(1).strip()
-                # Clean up common suffixes
-                artist = re.sub(r"\s+[-–]\s+.*$", "", artist)
-                artist = re.sub(r"\s+ft\.?.*$", "", artist, flags=re.IGNORECASE)
-                artist = re.sub(r"\s+feat\.?.*$", "", artist, flags=re.IGNORECASE)
-                artist = re.sub(r"\s+w/.*$", "", artist, flags=re.IGNORECASE)
-                artist = re.sub(r"\s*\[.*\]$", "", artist)
-                return artist.strip()
+                artist = self._clean_artist_name(artist)
+                if self._is_valid_artist_name(artist):
+                    return artist
 
-        # Fallback: split on dash
+        # Fallback: split on dash (only if clean title has a dash)
         if " - " in clean_title:
-            parts = clean_title.split(" - ")
-            if parts:
-                artist = parts[0].strip()
-                # Basic cleaning
-                artist = re.sub(r"\s*\[.*\]$", "", artist)
-                return artist.strip()
+            artist = clean_title.split(" - ")[0].strip()
+            artist = self._clean_artist_name(artist)
+            if self._is_valid_artist_name(artist):
+                return artist
 
         return None
+
+    def _clean_artist_name(self, artist: str) -> str:
+        """Clean up extracted artist name"""
+        artist = re.sub(r"\s+[-–]\s+.*$", "", artist)
+        artist = re.sub(r"\s+ft\.?.*$", "", artist, flags=re.IGNORECASE)
+        artist = re.sub(r"\s+feat\.?.*$", "", artist, flags=re.IGNORECASE)
+        artist = re.sub(r"\s+w/.*$", "", artist, flags=re.IGNORECASE)
+        artist = re.sub(r"\s*\[.*\]$", "", artist)
+        # Remove leading/trailing quotes and whitespace
+        artist = artist.strip().strip('"\'')
+        return artist.strip()
+
+    def _is_valid_artist_name(self, name: str) -> bool:
+        """Validate that an extracted string is likely an artist name"""
+        if not name or len(name) < 2 or len(name) > 80:
+            return False
+        # Reject blocklisted meta-post titles
+        if name.lower() in TITLE_BLOCKLIST:
+            return False
+        # Reject strings that look like sentences (5+ words starting with lowercase)
+        words = name.split()
+        if len(words) >= 5 and words[0][0].islower():
+            return False
+        return True
 
     def create_articles_from_artists(
         self, artists: List[Dict[str, Any]]
@@ -340,8 +383,9 @@ class RedditScraper:
         }
 
         color = genre_colors.get(genre, "#6C757D")
-        # Create a simple SVG placeholder
-        return f"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='225'><rect width='400' height='225' fill='{color}'/><text x='200' y='112' font-family='Arial' font-size='24' fill='white' text-anchor='middle'>{artist_name[:20]}</text></svg>"
+        # Create a simple SVG placeholder (escape artist name to prevent XSS)
+        safe_name = html_escape(artist_name[:20], quote=True)
+        return f"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='400' height='225'><rect width='400' height='225' fill='{color}'/><text x='200' y='112' font-family='Arial' font-size='24' fill='white' text-anchor='middle'>{safe_name}</text></svg>"
 
     def save_to_firebase(self, articles: List[Dict[str, Any]]) -> int:
         """Save articles to Firebase Firestore - matches RSS scraper schema exactly"""
@@ -352,8 +396,8 @@ class RedditScraper:
 
         for article in articles:
             try:
-                # Extract artist name from title for artist_names field
-                artist_name = self._extract_artist_from_title(article["title"])
+                # Extract artist name from the "Reddit Trending: <name>" title
+                artist_name = article["title"].removeprefix("Reddit Trending: ").strip()
                 artist_names = [artist_name] if artist_name else []
 
                 # Create document ID from title (match RSS scraper pattern)

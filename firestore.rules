@@ -162,7 +162,10 @@ service cloud.firestore {
 
     match /scrape_runs/{runId} {
       allow read: if true;
-      allow create, update: if request.auth != null || isConstrainedScrapeRunWrite();
+      // Unauthenticated writes must have matching document ID to prevent spoofing
+      allow create: if request.auth != null ||
+        (isConstrainedScrapeRunWrite() && runId == request.resource.data.run_id);
+      allow update: if request.auth != null;
       allow delete: if request.auth != null;
     }
 
