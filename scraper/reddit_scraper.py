@@ -7,6 +7,7 @@ Fetches trending music posts from Reddit using hf CLI
 import subprocess
 import json
 import re
+import hashlib
 from datetime import datetime, timedelta
 from typing import List, Dict, Any, Optional, Set
 import os
@@ -15,6 +16,7 @@ from dataclasses import dataclass, asdict
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+from urllib.parse import urlparse, urlunparse
 
 # Load environment variables
 try:
@@ -134,6 +136,7 @@ class RedditScraper:
     def __init__(self):
         self.session = self._create_session()
         self.existing_titles: Set[str] = set()
+        self.events: List[Dict[str, Any]] = []
 
     def _create_session(self):
         """Create HTTP session with retry logic"""
@@ -147,6 +150,34 @@ class RedditScraper:
         session.mount("http://", adapter)
         session.mount("https://", adapter)
         return session
+
+    def _log_event(self, event: str, level: str = "info", **data: Any) -> None:
+        self.events.append(
+            {
+                "ts": datetime.utcnow().isoformat() + "Z",
+                "event": event,
+                "level": level,
+                "data": data,
+            }
+        )
+
+    def _normalize_https_url(self, raw_url: str) -> str:
+        value = (raw_url or "").strip()
+        if not value:
+            return ""
+        parsed = urlparse(value)
+        if parsed.scheme == "http":
+            parsed = parsed._replace(scheme="https")
+            return urlunparse(parsed)
+        return value
+
+    def _build_doc_id(self, title: str, source_url: str, published: str) -> str:
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", (title or "").lower()).strip("-")
+        slug = (slug[:24] or "article").strip("-")
+        digest = hashlib.sha1(
+            f"{source_url}|{published}|{title}".encode("utf-8", errors="ignore")
+        ).hexdigest()[:20]
+        return f"{slug}-{digest}"
 
     def fetch_reddit_posts(self, subreddit: str, limit: int = 20) -> List[RedditPost]:
         """Fetch posts from Reddit using hf CLI"""
@@ -391,6 +422,10 @@ class RedditScraper:
         """Save articles to Firebase Firestore - matches RSS scraper schema exactly"""
         if not articles:
             return 0
+        if not API_KEY:
+            print("  ✗ Failed to save: FIREBASE_API_KEY is missing")
+            self._log_event("save_failed", level="error", reason="missing_api_key")
+            return 0
 
         saved_count = 0
 
@@ -401,7 +436,18 @@ class RedditScraper:
                 artist_names = [artist_name] if artist_name else []
 
                 # Create document ID from title (match RSS scraper pattern)
-                doc_id = re.sub(r"[^a-zA-Z0-9]", "-", article["title"].lower())[:50]
+                source_url = self._normalize_https_url(article["link"])
+                if not source_url.startswith("https://"):
+                    print(f"  ✗ Failed to save: source_url must be https ({article['link']})")
+                    self._log_event(
+                        "save_failed",
+                        level="error",
+                        reason="invalid_source_url",
+                        title=article["title"],
+                        source_url=article["link"],
+                    )
+                    continue
+                doc_id = self._build_doc_id(article["title"], source_url, article["published"])
 
                 # Prepare document data - MUST match RSS article schema exactly
                 # See firestore.rules for required fields
@@ -414,7 +460,7 @@ class RedditScraper:
                         },  # Use summary as full content
                         "source": {"stringValue": article["source"]},
                         "source_url": {
-                            "stringValue": article["link"]
+                            "stringValue": source_url
                         },  # Map link → source_url
                         "primary_genre": {
                             "stringValue": article["genre"]
@@ -456,13 +502,29 @@ class RedditScraper:
                 if response.status_code in [200, 201]:
                     saved_count += 1
                     print(f"  ✓ Saved: {article['title'][:50]}...")
+                    self._log_event(
+                        "save_ok",
+                        doc_id=doc_id,
+                        status_code=response.status_code,
+                        title=article["title"],
+                    )
                 else:
+                    error_excerpt = (response.text or "")[:400]
                     print(
-                        f"  ✗ Failed to save: {response.status_code} - {response.text[:200]}"
+                        f"  ✗ Failed to save: {response.status_code} - {error_excerpt}"
+                    )
+                    self._log_event(
+                        "save_failed",
+                        level="error",
+                        doc_id=doc_id,
+                        status_code=response.status_code,
+                        response_excerpt=error_excerpt,
+                        title=article["title"],
                     )
 
             except Exception as e:
                 print(f"  ✗ Error saving article: {e}")
+                self._log_event("save_exception", level="error", error=str(e))
 
         return saved_count
 

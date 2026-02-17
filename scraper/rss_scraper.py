@@ -10,13 +10,14 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import json
+import hashlib
 import re
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any, Tuple
 from dataclasses import dataclass, asdict
 import os
 from pathlib import Path
-from urllib.parse import urljoin, urlencode
+from urllib.parse import urljoin, urlencode, urlparse, urlunparse
 
 # Load environment variables
 try:
@@ -140,11 +141,69 @@ class RSSScraper:
 
         # Cache titles once per run to avoid re-fetching the full collection for every item.
         self._existing_titles: Optional[List[str]] = None
+        self.run_id: Optional[str] = None
+        self.artifact_dir = Path(
+            os.getenv("SCRAPER_ARTIFACT_DIR", Path(__file__).parent / "artifacts")
+        )
+        self.events: List[Dict[str, Any]] = []
 
     def _request(self, method: str, url: str, *, timeout: int = DEFAULT_TIMEOUT_SECONDS, **kwargs) -> requests.Response:
         headers = kwargs.pop("headers", {}) or {}
         headers.setdefault("User-Agent", "Mozilla/5.0 (compatible; miny-ven-bot/1.0)")
         return self.session.request(method, url, headers=headers, timeout=timeout, **kwargs)
+
+    def _log_event(self, event: str, level: str = "info", **data: Any) -> None:
+        entry = {
+            "ts": datetime.utcnow().isoformat() + "Z",
+            "run_id": self.run_id or "",
+            "event": event,
+            "level": level,
+            "data": data,
+        }
+        self.events.append(entry)
+
+    def _flush_artifacts(self, summary: Dict[str, Any], source_stats: Dict[str, Dict[str, int]]) -> None:
+        try:
+            self.artifact_dir.mkdir(parents=True, exist_ok=True)
+            rid = summary.get("run_id") or datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+            summary_path = self.artifact_dir / f"summary_{rid}.json"
+            events_path = self.artifact_dir / f"events_{rid}.jsonl"
+
+            summary_payload = {
+                "summary": summary,
+                "source_stats": source_stats,
+                "event_count": len(self.events),
+            }
+            summary_path.write_text(
+                json.dumps(summary_payload, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            with events_path.open("w", encoding="utf-8") as f:
+                for event in self.events:
+                    f.write(json.dumps(event, separators=(",", ":"), sort_keys=True) + "\n")
+
+            print(f"  ✓ Wrote artifacts: {summary_path} and {events_path}")
+        except Exception as e:
+            print(f"  ⚠ Failed writing artifacts: {e}")
+
+    def _normalize_source_url(self, raw_url: str) -> str:
+        value = (raw_url or "").strip()
+        if not value:
+            return ""
+        parsed = urlparse(value)
+        if parsed.scheme == "http":
+            parsed = parsed._replace(scheme="https")
+            return urlunparse(parsed)
+        return value
+
+    def _build_doc_id(self, article: Article) -> str:
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", (article.title or "").lower()).strip("-")
+        slug = (slug[:24] or "article").strip("-")
+        hash_input = (
+            f"{article.source_url}|{article.published_at.isoformat()}|{article.title}"
+        ).encode("utf-8", errors="ignore")
+        digest = hashlib.sha1(hash_input).hexdigest()[:20]
+        return f"{slug}-{digest}"
 
     def _extract_key_words(self, text: str) -> set:
         common_words = {
@@ -188,6 +247,12 @@ class RSSScraper:
             url = f"{FIRESTORE_URL}/articles?key={API_KEY}"
             response = self._request("GET", url, timeout=15)
             if response.status_code != 200:
+                self._log_event(
+                    "preload_titles_failed",
+                    level="warning",
+                    status_code=response.status_code,
+                    response_excerpt=(response.text or "")[:300],
+                )
                 self._existing_titles = titles
                 return titles
 
@@ -199,6 +264,7 @@ class RSSScraper:
                     titles.append(title.lower().strip())
         except Exception as e:
             print(f"  ⚠ Error preloading titles: {e}")
+            self._log_event("preload_titles_exception", level="warning", error=str(e))
 
         self._existing_titles = titles
         return titles
@@ -228,6 +294,7 @@ class RSSScraper:
             return items
         except Exception as e:
             print(f"  ✗ Error fetching RSS from {url}: {e}")
+            self._log_event("feed_fetch_failed", level="error", feed_url=url, error=str(e))
             return []
 
     def _get_text(self, element, tag: str) -> str:
@@ -677,11 +744,27 @@ New CTA Headline:"""
     def save_to_firebase(self, article: Article):
         """Save article to Firebase Firestore via REST API"""
         try:
+            if not API_KEY:
+                print("  ✗ Failed to save: FIREBASE_API_KEY is missing")
+                self._log_event("save_failed", level="error", reason="missing_api_key", title=article.title)
+                return False
+
             article_dict = asdict(article)
             article_dict["published_at"] = article.published_at.isoformat()
             article_dict["fetched_at"] = article.fetched_at.isoformat()
 
-            doc_id = re.sub(r"[^a-zA-Z0-9]", "-", article.title.lower())[:50]
+            if not article.source_url.startswith("https://"):
+                print(f"  ✗ Failed to save: source_url must be https ({article.source_url})")
+                self._log_event(
+                    "save_failed",
+                    level="error",
+                    reason="invalid_source_url",
+                    source_url=article.source_url,
+                    title=article.title,
+                )
+                return False
+
+            doc_id = self._build_doc_id(article)
 
             url = f"{FIRESTORE_URL}/articles/{doc_id}?key={API_KEY}"
             payload = {"fields": self.convert_to_firestore_fields(article_dict)}
@@ -690,14 +773,31 @@ New CTA Headline:"""
 
             if response.status_code in [200, 201]:
                 print(f"  ✓ Saved: {article.title[:60]}...")
+                self._log_event(
+                    "save_ok",
+                    doc_id=doc_id,
+                    status_code=response.status_code,
+                    source=article.source,
+                    title=article.title,
+                )
                 if self._existing_titles is not None:
                     self._existing_titles.append(article.title.lower().strip())
                 return True
             else:
-                print(f"  ✗ Failed to save: {response.status_code}")
+                error_excerpt = (response.text or "")[:400]
+                print(f"  ✗ Failed to save: {response.status_code} - {error_excerpt}")
+                self._log_event(
+                    "save_failed",
+                    level="error",
+                    doc_id=doc_id,
+                    status_code=response.status_code,
+                    response_excerpt=error_excerpt,
+                    title=article.title,
+                )
                 return False
         except Exception as e:
             print(f"  ✗ Error saving to Firebase: {e}")
+            self._log_event("save_exception", level="error", title=article.title, error=str(e))
             return False
 
     def process_feed(self, source_name: str, source_config: Dict) -> Dict[str, int]:
@@ -787,7 +887,7 @@ New CTA Headline:"""
                     summary=summary,
                     full_content=content_with_research[:2000],
                     source=resolved_source_name,
-                    source_url=item["link"],
+                    source_url=self._normalize_source_url(item.get("link", "")),
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
@@ -830,6 +930,8 @@ New CTA Headline:"""
     def run(self):
         """Run the scraper for all sources"""
         started_at = datetime.utcnow()
+        self.run_id = started_at.strftime("%Y%m%dT%H%M%SZ")
+        self.events = []
         print("🎵 miny-ven RSS Scraper")
         print("=" * 50)
         print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -838,10 +940,12 @@ New CTA Headline:"""
 
         if not API_KEY:
             print("⚠️  Warning: FIREBASE_API_KEY not set. Articles won't be saved.")
+            self._log_event("missing_env", level="warning", name="FIREBASE_API_KEY")
             print()
 
         if not OPENROUTER_API_KEY:
             print("⚠️  Warning: OPENROUTER_API_KEY not set. Using basic summaries.")
+            self._log_event("missing_env", level="warning", name="OPENROUTER_API_KEY")
             print()
 
         self._load_existing_titles()
@@ -863,7 +967,7 @@ New CTA Headline:"""
 
         finished_at = datetime.utcnow()
 
-        run_id = started_at.strftime("%Y%m%dT%H%M%SZ")
+        run_id = self.run_id or started_at.strftime("%Y%m%dT%H%M%SZ")
         summary = {
             "run_id": run_id,
             "version": SCRAPER_VERSION,
@@ -882,6 +986,15 @@ New CTA Headline:"""
             print("  ✓ Persisted run summary to Firestore: scrape_runs/" + run_id)
         else:
             print("  ⚠ Run summary not persisted (rules/API key may block).")
+        self._log_event(
+            "run_summary",
+            persisted=persisted,
+            total_saved=total_saved,
+            total_sources=len(RSS_SOURCES),
+            sources_ok=sources_ok,
+            sources_failed=sources_failed,
+        )
+        self._flush_artifacts(summary, source_stats)
 
         print("\n" + "=" * 50)
         print(f"✅ Complete! Added {total_saved} new articles")
