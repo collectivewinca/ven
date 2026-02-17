@@ -12,6 +12,7 @@ service cloud.firestore {
         'secondary_genres',
         'artist_names',
         'image_url',
+        'image_source',
         'published_at',
         'read_time',
         'share_count',
@@ -33,6 +34,7 @@ service cloud.firestore {
         'secondary_genres',
         'artist_names',
         'image_url',
+        'image_source',
         'published_at',
         'read_time',
         'share_count',
@@ -53,6 +55,7 @@ service cloud.firestore {
         request.resource.data.secondary_genres is list &&
         request.resource.data.artist_names is list &&
         request.resource.data.image_url is string &&
+        (!('image_source' in request.resource.data) || request.resource.data.image_source is string) &&
         request.resource.data.published_at is string &&
         request.resource.data.read_time is int &&
         request.resource.data.share_count is int &&
@@ -68,6 +71,7 @@ service cloud.firestore {
         request.resource.data.summary.size() > 0 &&
         request.resource.data.summary.size() <= 1000 &&
         request.resource.data.full_content.size() <= 4000 &&
+        (!('image_source' in request.resource.data) || request.resource.data.image_source.size() <= 64) &&
         request.resource.data.source_url.matches('^https://.*') &&
         request.resource.data.read_time >= 1 &&
         request.resource.data.read_time <= 600 &&

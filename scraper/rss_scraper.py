@@ -17,7 +17,7 @@ import os
 import sys
 import hashlib
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit, urlunsplit, urljoin, quote
 from email.utils import parsedate_to_datetime
 
 # Load environment variables
@@ -131,6 +131,7 @@ class Article:
     bookmark_count: int
     view_count: int
     fetched_at: datetime
+    image_source: str = "unknown"
 
 
 class RSSScraper:
@@ -248,6 +249,137 @@ class RSSScraper:
                 return img_match.group(1)
 
         return None
+
+    def _extract_image_from_article_html(self, html: str, article_url: str) -> Optional[str]:
+        if not html:
+            return None
+
+        meta_tags = re.findall(r"<meta\\s+[^>]*>", html, flags=re.IGNORECASE)
+        wanted_props = {
+            "og:image",
+            "og:image:secure_url",
+            "twitter:image",
+            "twitter:image:src",
+        }
+
+        for tag in meta_tags:
+            attrs = dict(
+                (k.lower(), v.strip())
+                for k, v in re.findall(r"([a-zA-Z_:.-]+)\\s*=\\s*['\\\"]([^'\\\"]*)['\\\"]", tag)
+            )
+            prop = attrs.get("property", "").lower()
+            name = attrs.get("name", "").lower()
+            content = attrs.get("content", "").strip()
+            if (prop in wanted_props or name in wanted_props) and content:
+                return urljoin(article_url, content)
+        return None
+
+    def _fetch_open_graph_image(self, article_url: str) -> Optional[str]:
+        if not article_url:
+            return None
+        try:
+            response = self.session.get(
+                article_url,
+                timeout=12,
+                allow_redirects=True,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; miny-ven-bot/1.0)"},
+            )
+            if response.status_code >= 400:
+                return None
+            content_type = (response.headers.get("content-type") or "").lower()
+            if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
+                return None
+            return self._extract_image_from_article_html(response.text, article_url)
+        except Exception:
+            return None
+
+    def _is_valid_image_url(self, image_url: str) -> bool:
+        value = (image_url or "").strip()
+        if not value:
+            return False
+        scheme = urlsplit(value).scheme.lower()
+        if scheme not in {"http", "https"}:
+            return False
+        try:
+            head = self.session.head(value, timeout=8, allow_redirects=True)
+            if head.status_code < 400:
+                content_type = (head.headers.get("content-type") or "").lower()
+                return content_type.startswith("image/") or not content_type
+        except Exception:
+            pass
+        try:
+            probe = self.session.get(value, timeout=8, stream=True, allow_redirects=True)
+            if probe.status_code >= 400:
+                return False
+            content_type = (probe.headers.get("content-type") or "").lower()
+            return content_type.startswith("image/")
+        except Exception:
+            return False
+
+    def _fetch_artist_image(self, artist_name: str) -> Optional[str]:
+        if not artist_name:
+            return None
+        try:
+            # Public endpoint, no API key required.
+            response = self.session.get(
+                "https://api.deezer.com/search/artist",
+                params={"q": artist_name},
+                timeout=10,
+            )
+            if response.status_code != 200:
+                return None
+            data = response.json()
+            for entry in data.get("data", [])[:3]:
+                candidate = (
+                    entry.get("picture_xl")
+                    or entry.get("picture_big")
+                    or entry.get("picture_medium")
+                    or entry.get("picture")
+                    or ""
+                )
+                if candidate and self._is_valid_image_url(candidate):
+                    return candidate
+        except Exception:
+            return None
+        return None
+
+    def _build_ai_image_url(self, title: str, artist: str, genre: str) -> str:
+        prompt = (
+            f"Editorial music cover art, cinematic, high contrast lighting, "
+            f"artist {artist or 'unknown'}, genre {genre or 'mixed'}, headline {title[:120]}"
+        )
+        return (
+            "https://image.pollinations.ai/prompt/"
+            + quote(prompt, safe="")
+            + "?width=1200&height=675&model=flux&nologo=true"
+        )
+
+    def resolve_article_image(
+        self,
+        item: Dict[str, str],
+        *,
+        title: str,
+        artist_names: List[str],
+        primary_genre: str,
+    ) -> Tuple[str, str]:
+        article_url = self._normalize_source_url(item.get("link", ""))
+        candidates = [
+            ("rss", item.get("image", "")),
+            ("open_graph", self._fetch_open_graph_image(article_url)),
+        ]
+        for strategy, candidate in candidates:
+            if not candidate:
+                continue
+            normalized = self._normalize_source_url(urljoin(article_url, candidate.strip()))
+            if self._is_valid_image_url(normalized):
+                return normalized, strategy
+
+        if artist_names:
+            artist_img = self._fetch_artist_image(artist_names[0])
+            if artist_img:
+                return artist_img, "artist_api"
+
+        return self._build_ai_image_url(title, artist_names[0] if artist_names else "", primary_genre), "ai_generated"
 
     def summarize_with_deepseek(self, title: str, content: str) -> str:
         """Summarize article to exactly 60 words using DeepSeek API"""
@@ -739,6 +871,26 @@ New CTA Headline:"""
                     detail = response.json().get("error", {}).get("message", "")
                 except Exception:
                     detail = response.text[:200]
+                # Backward compatibility: older deployed rules may not yet allow image_source.
+                if article_dict.get("image_source") and response.status_code in (400, 403):
+                    compat_dict = dict(article_dict)
+                    compat_dict.pop("image_source", None)
+                    compat_payload = {"fields": self.convert_to_firestore_fields(compat_dict)}
+                    compat_resp = requests.patch(url, json=compat_payload, timeout=10)
+                    if compat_resp.status_code in (200, 201):
+                        print(f"  ✓ Saved (compat): {article.title[:60]}...")
+                        self._log_event(
+                            "save_ok_compat",
+                            doc_id=doc_id,
+                            status_code=compat_resp.status_code,
+                            title=article.title,
+                            dropped_field="image_source",
+                        )
+                        if canonical_url:
+                            self.existing_source_urls.add(canonical_url)
+                        self.existing_titles.add((article.title or "").lower().strip())
+                        return True
+
                 print(f"  ✗ Failed to save: {response.status_code} — {detail}")
                 self._log_event(
                     "save_failed",
@@ -816,6 +968,12 @@ New CTA Headline:"""
                 )
 
                 pub_date = self.parse_pub_date(item.get("pub_date", ""))
+                image_url, image_source = self.resolve_article_image(
+                    item,
+                    title=cta_title,
+                    artist_names=artists,
+                    primary_genre=primary_genre,
+                )
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
@@ -827,7 +985,7 @@ New CTA Headline:"""
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
-                    image_url=item["image"] or "",
+                    image_url=image_url,
                     published_at=pub_date,
                     read_time=60,
                     share_count=0,
@@ -835,6 +993,7 @@ New CTA Headline:"""
                     bookmark_count=0,
                     view_count=0,
                     fetched_at=datetime.now(),
+                    image_source=image_source,
                 )
 
                 if self.save_to_firebase(article):
@@ -949,6 +1108,12 @@ New CTA Headline:"""
                 )
 
                 pub_date = self.parse_pub_date(item.get("pub_date", ""))
+                image_url, image_source = self.resolve_article_image(
+                    item,
+                    title=cta_title,
+                    artist_names=artists,
+                    primary_genre=primary_genre,
+                )
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
@@ -960,7 +1125,7 @@ New CTA Headline:"""
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
-                    image_url=item["image"] or "",
+                    image_url=image_url,
                     published_at=pub_date,
                     read_time=60,
                     share_count=0,
@@ -968,6 +1133,7 @@ New CTA Headline:"""
                     bookmark_count=0,
                     view_count=0,
                     fetched_at=datetime.now(),
+                    image_source=image_source,
                 )
 
                 if self.save_to_firebase(article):
@@ -1053,6 +1219,12 @@ New CTA Headline:"""
                 )
 
                 pub_date = self.parse_pub_date(item.get("pub_date", ""))
+                image_url, image_source = self.resolve_article_image(
+                    item,
+                    title=cta_title,
+                    artist_names=artists,
+                    primary_genre=primary_genre,
+                )
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
@@ -1064,7 +1236,7 @@ New CTA Headline:"""
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
-                    image_url=item["image"] or "",
+                    image_url=image_url,
                     published_at=pub_date,
                     read_time=60,
                     share_count=0,
@@ -1072,6 +1244,7 @@ New CTA Headline:"""
                     bookmark_count=0,
                     view_count=0,
                     fetched_at=datetime.now(),
+                    image_source=image_source,
                 )
 
                 if self.save_to_firebase(article):
