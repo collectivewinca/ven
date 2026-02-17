@@ -16,6 +16,7 @@ from dataclasses import dataclass, asdict
 import os
 import sys
 import hashlib
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from email.utils import parsedate_to_datetime
 
@@ -137,6 +138,38 @@ class RSSScraper:
         self.existing_source_urls: Set[str] = set()
         self.existing_titles: Set[str] = set()
         self.session = requests.Session()
+        self.run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+        self.events: List[Dict[str, object]] = []
+        self.artifact_dir = Path(
+            os.getenv("SCRAPER_ARTIFACT_DIR", Path(__file__).parent / "artifacts")
+        )
+
+    def _log_event(self, event: str, level: str = "info", **data: object) -> None:
+        self.events.append(
+            {
+                "ts": datetime.utcnow().isoformat() + "Z",
+                "run_id": self.run_id,
+                "event": event,
+                "level": level,
+                "data": data,
+            }
+        )
+
+    def _flush_artifacts(self, summary: Dict[str, object]) -> None:
+        try:
+            self.artifact_dir.mkdir(parents=True, exist_ok=True)
+            summary_path = self.artifact_dir / f"summary_{self.run_id}.json"
+            events_path = self.artifact_dir / f"events_{self.run_id}.jsonl"
+            summary_path.write_text(
+                json.dumps(summary, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            with events_path.open("w", encoding="utf-8") as f:
+                for event in self.events:
+                    f.write(json.dumps(event, separators=(",", ":"), sort_keys=True) + "\n")
+            print(f"  ✓ Wrote artifacts: {summary_path} and {events_path}")
+        except Exception as e:
+            print(f"  ⚠ Failed writing artifacts: {e}")
 
     def fetch_rss_feed(self, url: str) -> List[Dict]:
         """Fetch and parse RSS feed"""
@@ -167,6 +200,7 @@ class RSSScraper:
             return items
         except Exception as e:
             print(f"  ✗ Error fetching RSS from {url}: {e}")
+            self._log_event("feed_fetch_failed", level="error", feed_url=url, error=str(e))
             return []
 
     def parse_pub_date(self, value: str) -> datetime:
@@ -541,6 +575,25 @@ New CTA Headline:"""
         except Exception:
             return (url or "").strip()
 
+    def _normalize_source_url(self, raw_url: str) -> str:
+        value = (raw_url or "").strip()
+        if not value:
+            return ""
+        parts = urlsplit(value)
+        if (parts.scheme or "").lower() == "http":
+            parts = parts._replace(scheme="https")
+            return urlunsplit(parts)
+        return value
+
+    def _build_doc_id(self, article: Article) -> str:
+        slug = re.sub(r"[^a-zA-Z0-9]+", "-", (article.title or "").lower()).strip("-")
+        slug = (slug[:24] or "article").strip("-")
+        hash_input = (
+            f"{article.source_url}|{article.published_at.isoformat()}|{article.title}"
+        ).encode("utf-8", errors="ignore")
+        digest = hashlib.sha1(hash_input).hexdigest()[:20]
+        return f"{slug}-{digest}"
+
     def load_existing_articles(self):
         """Warm duplicate indexes from Firestore."""
         if not API_KEY:
@@ -559,6 +612,12 @@ New CTA Headline:"""
                 response = self.session.get(url, timeout=15)
                 if response.status_code != 200:
                     print(f"  ⚠ Could not warm duplicate index: {response.status_code}")
+                    self._log_event(
+                        "warm_index_failed",
+                        level="warning",
+                        status_code=response.status_code,
+                        response_excerpt=(response.text or "")[:300],
+                    )
                     return
 
                 data = response.json()
@@ -576,6 +635,7 @@ New CTA Headline:"""
                     break
             except Exception as e:
                 print(f"  ⚠ Error warming duplicate index: {e}")
+                self._log_event("warm_index_exception", level="warning", error=str(e))
                 return
 
         print(
@@ -602,6 +662,11 @@ New CTA Headline:"""
     def save_to_firebase(self, article: Article):
         """Save article to Firebase Firestore via REST API"""
         try:
+            if not API_KEY:
+                print("  ✗ Failed to save: FIREBASE_API_KEY is missing")
+                self._log_event("save_failed", level="error", reason="missing_api_key", title=article.title)
+                return False
+
             article_dict = asdict(article)
             article_dict["published_at"] = article.published_at.isoformat()
             article_dict["fetched_at"] = article.fetched_at.isoformat()
@@ -612,10 +677,19 @@ New CTA Headline:"""
 
             # Enforce Firestore rule constraints so writes aren't rejected.
             # source_url must start with https://
-            if not article_dict.get("source_url", "").startswith("https://"):
-                article_dict["source_url"] = article_dict["source_url"].replace(
-                    "http://", "https://", 1
+            article_dict["source_url"] = self._normalize_source_url(
+                article_dict.get("source_url", "")
+            )
+            if not article_dict["source_url"].startswith("https://"):
+                self._log_event(
+                    "save_failed",
+                    level="error",
+                    reason="invalid_source_url",
+                    source_url=article_dict["source_url"],
+                    title=article.title,
                 )
+                print(f"  ✗ Failed to save: invalid source_url ({article_dict['source_url']})")
+                return False
 
             # title: max 200 chars
             if len(article_dict.get("title", "")) > 200:
@@ -631,8 +705,15 @@ New CTA Headline:"""
                     article_dict["full_content"][:3997] + "..."
                 )
 
-            canonical_url = self._normalize_url(article.source_url)
-            doc_id = hashlib.md5(canonical_url.encode("utf-8")).hexdigest()[:32]
+            canonical_url = self._normalize_url(article_dict["source_url"])
+            doc_id = self._build_doc_id(
+                Article(
+                    **{
+                        **article.__dict__,
+                        "source_url": article_dict["source_url"],
+                    }
+                )
+            )
 
             url = f"{FIRESTORE_URL}/articles/{doc_id}?key={API_KEY}"
             payload = {"fields": self.convert_to_firestore_fields(article_dict)}
@@ -641,6 +722,13 @@ New CTA Headline:"""
 
             if response.status_code in [200, 201]:
                 print(f"  ✓ Saved: {article.title[:60]}...")
+                self._log_event(
+                    "save_ok",
+                    doc_id=doc_id,
+                    status_code=response.status_code,
+                    title=article.title,
+                    source=article.source,
+                )
                 if canonical_url:
                     self.existing_source_urls.add(canonical_url)
                 self.existing_titles.add((article.title or "").lower().strip())
@@ -652,9 +740,18 @@ New CTA Headline:"""
                 except Exception:
                     detail = response.text[:200]
                 print(f"  ✗ Failed to save: {response.status_code} — {detail}")
+                self._log_event(
+                    "save_failed",
+                    level="error",
+                    doc_id=doc_id,
+                    status_code=response.status_code,
+                    detail=detail,
+                    title=article.title,
+                )
                 return False
         except Exception as e:
             print(f"  ✗ Error saving to Firebase: {e}")
+            self._log_event("save_exception", level="error", title=article.title, error=str(e))
             return False
 
     def process_feed(self, source_name: str, source_config: Dict) -> Tuple[int, int]:
@@ -726,7 +823,7 @@ New CTA Headline:"""
                     summary=summary,
                     full_content=content_with_research[:2000],
                     source=source_name.replace("_", " ").title(),
-                    source_url=item["link"],
+                    source_url=self._normalize_source_url(item["link"]),
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
@@ -860,7 +957,7 @@ New CTA Headline:"""
                     summary=summary,
                     full_content=content[:2000],
                     source="Perplexity Discovery",
-                    source_url=item["link"],
+                    source_url=self._normalize_source_url(item["link"]),
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
@@ -965,7 +1062,7 @@ New CTA Headline:"""
                     summary=summary,
                     full_content=content[:2000],
                     source="Exa Discovery",
-                    source_url=item["link"],
+                    source_url=self._normalize_source_url(item["link"]),
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
@@ -1022,6 +1119,7 @@ New CTA Headline:"""
 
         total_processed = 0
         total_fetched_items = 0
+        source_stats: Dict[str, Dict[str, int]] = {}
 
         self.load_existing_articles()
 
@@ -1031,8 +1129,13 @@ New CTA Headline:"""
                 processed, fetched_items = self.process_feed(source_name, config)
                 total_processed += processed
                 total_fetched_items += fetched_items
+                source_stats[source_name] = {
+                    "saved": processed,
+                    "items_found": fetched_items,
+                }
             except Exception as e:
                 print(f"  ✗ Error with {source_name}: {e}")
+                self._log_event("source_failed", level="error", source=source_name, error=str(e))
                 continue
 
         # 2. Exa news discovery
@@ -1040,13 +1143,32 @@ New CTA Headline:"""
             exa_processed, exa_items = self.discover_exa_articles()
             total_processed += exa_processed
             total_fetched_items += exa_items
+            source_stats["exa_discovery"] = {
+                "saved": exa_processed,
+                "items_found": exa_items,
+            }
         except Exception as e:
             print(f"  ✗ Error with Exa discovery: {e}")
+            self._log_event("source_failed", level="error", source="exa_discovery", error=str(e))
 
         print("\n" + "=" * 50)
         print(f"Fetched {total_fetched_items} feed items")
         print(f"✅ Complete! Added {total_processed} new articles")
         print(f"Finished at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        summary = {
+            "run_id": self.run_id,
+            "version": "rss-main-plus-artifacts",
+            "finished_at": datetime.utcnow().isoformat() + "Z",
+            "total_processed": total_processed,
+            "total_fetched_items": total_fetched_items,
+            "source_stats": source_stats,
+        }
+        self._log_event(
+            "run_summary",
+            total_processed=total_processed,
+            total_fetched_items=total_fetched_items,
+        )
+        self._flush_artifacts(summary)
 
         if total_fetched_items == 0:
             raise RuntimeError("All RSS feeds returned zero items.")

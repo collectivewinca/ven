@@ -59,9 +59,18 @@ jobs:
         DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
         PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
         EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+        SCRAPER_ARTIFACT_DIR: scraper/artifacts
       run: |
         cd scraper
         python3 rss_scraper.py
+
+    - name: Upload scraper artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: scraper-artifacts-${{ github.run_id }}
+        path: scraper/artifacts/
+        if-no-files-found: warn
 
     - name: Verify freshness window
       env:

@@ -1,0 +1,78 @@
+name: Reddit Artist Discovery
+
+on:
+  schedule:
+    # Twice daily: 8am and 8pm UTC (3am/3pm ET, 12am/12pm PT)
+    - cron: '0 8,20 * * *'
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  scrape-reddit:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Set up Node.js (for hf CLI)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Install dependencies
+      run: |
+        # Install hf CLI globally
+        npm install -g hacker-feeds-cli
+        
+        # Install Python dependencies
+        cd scraper
+        pip install -r requirements.txt
+        pip install python-dotenv
+    
+    - name: Run Reddit Scraper
+      env:
+        FIREBASE_PROJECT_ID: miny-ven
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        # Note: Reddit scraper doesn't need AI API keys
+      run: |
+        cd scraper
+        python3 reddit_scraper.py
+    
+    - name: Report status
+      if: always()
+      env:
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+      run: |
+        echo "Reddit scraper completed at $(date)"
+        total=$(python3 - <<'PY'
+        import json
+        import os
+        from urllib.parse import quote
+        from urllib.request import urlopen
+
+        key = os.environ.get("FIREBASE_API_KEY", "")
+        if not key:
+          print("unknown")
+          raise SystemExit(0)
+
+        base = f"https://firestore.googleapis.com/v1/projects/miny-ven/databases/(default)/documents/articles?key={key}&pageSize=200"
+        token = ""
+        count = 0
+
+        while True:
+          url = base + (f"&pageToken={quote(token)}" if token else "")
+          payload = json.load(urlopen(url))
+          count += len(payload.get("documents", []))
+          token = payload.get("nextPageToken", "")
+          if not token:
+            break
+
+        print(count)
+        PY
+        )
+        echo "Total articles in database: ${total}"
