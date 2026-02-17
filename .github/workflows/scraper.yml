@@ -25,22 +25,40 @@ jobs:
         pip install -r requirements.txt
         pip install python-dotenv
 
-    - name: Run unit tests (if present)
+    - name: Preflight Firestore access
+      env:
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
       run: |
-        cd scraper
-        if [ -d tests ]; then
-          python3 -m unittest discover -s tests -p 'test_*.py'
-        else
-          echo "No scraper/tests directory; skipping unit tests."
-        fi
+        python3 - <<'PY'
+        import os
+        import json
+        from urllib.request import urlopen, Request
+        from urllib.error import HTTPError, URLError
+
+        key = os.environ.get("FIREBASE_API_KEY", "")
+        if not key:
+            raise SystemExit("FIREBASE_API_KEY is missing")
+
+        url = "https://firestore.googleapis.com/v1/projects/miny-ven/databases/(default)/documents/articles?pageSize=1&key=" + key
+        req = Request(url, headers={"User-Agent": "miny-ven-preflight/1.0"})
+        try:
+            with urlopen(req, timeout=20) as resp:
+                payload = json.load(resp)
+                print(f"Firestore preflight status: {resp.status}")
+                print(f"Preflight docs count in payload: {len(payload.get('documents', []))}")
+        except HTTPError as e:
+            raise SystemExit(f"Firestore preflight HTTP error: {e.code}")
+        except URLError as e:
+            raise SystemExit(f"Firestore preflight URL error: {e.reason}")
+        PY
     
     - name: Run RSS Scraper
       env:
         FIREBASE_PROJECT_ID: miny-ven
         FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
         DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-        OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
+        EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
         SCRAPER_ARTIFACT_DIR: scraper/artifacts
       run: |
         cd scraper
@@ -53,7 +71,45 @@ jobs:
         name: scraper-artifacts-${{ github.run_id }}
         path: scraper/artifacts/
         if-no-files-found: warn
-    
+
+    - name: Verify freshness window
+      env:
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+      run: |
+        python3 - <<'PY'
+        import json
+        import os
+        from datetime import datetime, timezone, timedelta
+        from urllib.request import urlopen
+
+        key = os.environ.get("FIREBASE_API_KEY", "")
+        url = "https://firestore.googleapis.com/v1/projects/miny-ven/databases/(default)/documents/articles?key=" + key + "&pageSize=200"
+        payload = json.load(urlopen(url))
+        docs = payload.get("documents", [])
+        if not docs:
+            raise SystemExit("No articles found in Firestore after scraper run")
+
+        newest = None
+        for doc in docs:
+            ts = doc.get("fields", {}).get("fetched_at", {}).get("stringValue")
+            if not ts:
+                continue
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            if newest is None or dt > newest:
+                newest = dt
+
+        if newest is None:
+            raise SystemExit("No fetched_at timestamps present in Firestore")
+
+        age = datetime.now(timezone.utc) - newest
+        print(f"Newest fetched_at: {newest.isoformat()}")
+        print(f"Age: {age}")
+        if age > timedelta(hours=24):
+            raise SystemExit(f"Data is stale (>24h). Latest fetched_at: {newest.isoformat()}")
+        PY
+
     - name: Report status
       if: always()
       run: |

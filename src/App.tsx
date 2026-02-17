@@ -103,14 +103,10 @@ function App() {
     
     try {
       // Use REST API directly to avoid Firestore client issues
-      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID;
+      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'miny-ven';
       const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-
-      if (!projectId || !apiKey) {
-        throw new Error('Missing Firebase configuration. Set VITE_FIREBASE_PROJECT_ID and VITE_FIREBASE_API_KEY.');
-      }
-
-      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/articles?key=${apiKey}`;
+      const apiKeyParam = apiKey ? `?key=${apiKey}` : '';
+      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/articles${apiKeyParam}`;
       
       console.log('Fetching articles from REST API...');
       const response = await fetch(url);
