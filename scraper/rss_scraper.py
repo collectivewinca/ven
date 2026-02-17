@@ -827,8 +827,7 @@ New CTA Headline:"""
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
-                    image_url=item["image"]
-                    or "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800",
+                    image_url=item["image"] or "",
                     published_at=pub_date,
                     read_time=60,
                     share_count=0,
@@ -961,8 +960,7 @@ New CTA Headline:"""
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
-                    image_url=item["image"]
-                    or "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800",
+                    image_url=item["image"] or "",
                     published_at=pub_date,
                     read_time=60,
                     share_count=0,
@@ -1066,8 +1064,7 @@ New CTA Headline:"""
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
                     artist_names=artists,
-                    image_url=item["image"]
-                    or "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=800",
+                    image_url=item["image"] or "",
                     published_at=pub_date,
                     read_time=60,
                     share_count=0,

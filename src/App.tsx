@@ -206,6 +206,24 @@ function App() {
     ? articles 
     : articles.filter(a => a.primaryGenre === selectedGenre);
 
+  const getFallbackImage = useCallback((genre?: string) => {
+    const map: Record<string, string> = {
+      gospel: '/branding/minylogo.png',
+      hiphop: '/branding/minylogo.png',
+      pop: '/branding/minylogo.png',
+      rock: '/branding/minylogo.png',
+      electronic: '/branding/minylogo.png',
+    };
+    return map[genre || ''] || '/branding/minylogo.png';
+  }, []);
+
+  const resolveArticleImage = useCallback((imageUrl?: string, genre?: string) => {
+    const raw = (imageUrl || '').trim();
+    if (!raw) return getFallbackImage(genre);
+    if (raw.includes('images.unsplash.com')) return getFallbackImage(genre);
+    return raw;
+  }, [getFallbackImage]);
+
   const currentArticle = filteredArticles[currentIndex];
 
   // Save bookmarks to localStorage
@@ -557,10 +575,16 @@ function App() {
               {/* Image with Gradient Overlay - Smaller size with tags */}
               <div className="relative aspect-[16/9] mb-4 rounded-2xl sm:rounded-3xl overflow-hidden bg-gray-900 shadow-2xl card-hover group">
                 <img 
-                  src={currentArticle.imageUrl} 
+                  src={resolveArticleImage(currentArticle.imageUrl, currentArticle.primaryGenre)}
                   alt={currentArticle.title}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                   loading="lazy"
+                  onError={(e) => {
+                    const el = e.currentTarget as HTMLImageElement;
+                    if (!el.src.endsWith('/branding/minylogo.png')) {
+                      el.src = getFallbackImage(currentArticle.primaryGenre);
+                    }
+                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
                 
