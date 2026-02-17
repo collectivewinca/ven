@@ -444,6 +444,166 @@ function App() {
   }, []);
 
   const showDesktopShell = isDesktopViewport && useDesktopShell;
+  const isDesktopGalleryMode = isDesktopViewport && !useDesktopShell;
+
+  const desktopGalleryContent = (
+    <div className="h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_8%_8%,#1f2937_0%,#111827_40%,#030712_100%)] text-white">
+      <div className="h-full overflow-y-auto scrollbar-hide">
+        <div className="sticky top-0 z-20 border-b border-white/10 bg-black/40 backdrop-blur-xl">
+          <div className="mx-auto max-w-[1400px] px-6 py-5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="h-11 w-11 rounded-2xl border border-white/20 bg-white/10 p-2">
+                  <img src="/branding/minylogo.png" alt="miny y0" className="h-full w-full object-contain" />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-black tracking-tight">y0</h1>
+                  <p className="text-xs uppercase tracking-[0.22em] text-white/50">Live Music Intelligence</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => fetchArticles(selectedGenre)}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium transition hover:bg-white/20"
+                  disabled={loading}
+                >
+                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+                <button
+                  onClick={() => setShowBookmarks(true)}
+                  className="relative rounded-full border border-white/20 bg-white/10 p-2.5 transition hover:bg-white/20"
+                  aria-label="View bookmarks"
+                >
+                  <Bookmark className={`h-4 w-4 ${bookmarks.length ? 'fill-yellow-400 text-yellow-400' : 'text-white/80'}`} />
+                  {bookmarks.length > 0 && (
+                    <span className="absolute -right-1 -top-1 grid h-4 w-4 place-items-center rounded-full bg-rose-500 text-[10px] font-bold text-white">
+                      {bookmarks.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {genres.map((genre) => (
+                <button
+                  key={genre.id}
+                  onClick={() => setSelectedGenre(genre.id)}
+                  className={`rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
+                    selectedGenre === genre.id
+                      ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg`
+                      : 'border border-white/20 bg-white/5 text-white/70 hover:bg-white/10'
+                  }`}
+                >
+                  {genre.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mx-auto grid max-w-[1400px] grid-cols-12 gap-6 px-6 py-6">
+          <section className="col-span-12 lg:col-span-7">
+            {loading ? (
+              <ArticleSkeleton />
+            ) : !currentArticle ? (
+              <div className="rounded-3xl border border-white/10 bg-black/30 p-10 text-center text-white/60">
+                No articles available
+              </div>
+            ) : (
+              <article className="overflow-hidden rounded-3xl border border-white/10 bg-black/45 shadow-2xl">
+                <div className="relative aspect-[16/9]">
+                  <img
+                    src={resolveArticleImage(currentArticle.imageUrl, currentArticle.primaryGenre)}
+                    alt={currentArticle.title}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                    onError={(e) => {
+                      const el = e.currentTarget as HTMLImageElement;
+                      el.src = getFallbackImage(currentArticle.primaryGenre);
+                    }}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
+                  <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
+                    <span className={`rounded-full bg-gradient-to-r px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
+                      genres.find(g => g.id === currentArticle.primaryGenre)?.gradient || 'from-gray-600 to-gray-500'
+                    }`}>
+                      {currentArticle.primaryGenre}
+                    </span>
+                    <span className="rounded-full bg-black/50 px-3 py-1 text-[11px] text-white/90">{currentArticle.source}</span>
+                  </div>
+                </div>
+                <div className="space-y-3 p-6">
+                  <h2 className="text-2xl font-extrabold leading-tight tracking-tight">{currentArticle.title}</h2>
+                  <p className="leading-relaxed text-white/75">{currentArticle.summary}</p>
+                  <div className="flex items-center justify-between pt-2 text-sm text-white/55">
+                    <span>{new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                    <a
+                      href={currentArticle.sourceUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-2 rounded-full border border-white/20 px-3 py-1.5 text-white/80 transition hover:bg-white/10"
+                      onClick={() => trackEvent('external_link', currentArticle.id)}
+                    >
+                      Open Source <ExternalLink className="h-3.5 w-3.5" />
+                    </a>
+                  </div>
+                </div>
+              </article>
+            )}
+          </section>
+
+          <aside className="col-span-12 lg:col-span-5">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">More Stories</h3>
+              <span className="text-xs text-white/40">{filteredArticles.length} total</span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {filteredArticles.map((article) => {
+                const idx = filteredArticles.findIndex(a => a.id === article.id);
+                const active = article.id === currentArticle?.id;
+                return (
+                  <button
+                    key={article.id}
+                    onClick={() => {
+                      setCurrentIndex(idx);
+                      trackEvent('desktop_expand', article.id);
+                    }}
+                    className={`group overflow-hidden rounded-2xl border text-left transition ${
+                      active
+                        ? 'border-white/40 bg-white/10'
+                        : 'border-white/10 bg-black/35 hover:-translate-y-0.5 hover:border-white/25 hover:bg-black/55'
+                    }`}
+                  >
+                    <div className="relative aspect-[16/10]">
+                      <img
+                        src={resolveArticleImage(article.imageUrl, article.primaryGenre)}
+                        alt={article.title}
+                        className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                        loading="lazy"
+                        onError={(e) => {
+                          const el = e.currentTarget as HTMLImageElement;
+                          el.src = getFallbackImage(article.primaryGenre);
+                        }}
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+                    </div>
+                    <div className="space-y-1 p-3">
+                      <p className="line-clamp-2 text-sm font-semibold leading-tight text-white">{article.title}</p>
+                      <p className="text-[11px] uppercase tracking-wider text-white/45">{article.source}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </aside>
+        </div>
+      </div>
+      {toast && <Toast message={toast} onClose={() => setToast(null)} />}
+    </div>
+  );
 
   const appContent = !currentArticle && !loading ? (
     <div className="h-full bg-black flex items-center justify-center safe-area-top safe-area-bottom">
@@ -928,6 +1088,9 @@ function App() {
         </button>
       )}
 
+      {isDesktopGalleryMode ? (
+        desktopGalleryContent
+      ) : (
       <div className={showDesktopShell ? 'iphone-shell-frame' : ''}>
         {showDesktopShell && (
           <>
@@ -943,6 +1106,7 @@ function App() {
           {appContent}
         </div>
       </div>
+      )}
     </div>
   );
 }
