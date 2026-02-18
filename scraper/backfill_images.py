@@ -88,7 +88,8 @@ def generate_image(title: str, artist: str, genre: str) -> bytes | None:
             .get("parts", [])
         )
         for part in parts:
-            inline = part.get("inline_data")
+            # REST API uses camelCase (inlineData/mimeType)
+            inline = part.get("inlineData") or part.get("inline_data")
             if inline and inline.get("data"):
                 image_bytes = base64.b64decode(inline["data"])
                 print(f"  ✓ Gemini generated image ({len(image_bytes) // 1024}KB)")

@@ -482,14 +482,15 @@ class RSSScraper:
                 .get("parts", [])
             )
 
-            # Find the inline_data part with image bytes
+            # Find the inlineData part with image bytes
+            # REST API uses camelCase (inlineData/mimeType)
             for part in parts:
-                inline = part.get("inline_data")
+                inline = part.get("inlineData") or part.get("inline_data")
                 if not inline or not inline.get("data"):
                     continue
 
                 image_bytes = base64.b64decode(inline["data"])
-                mime = inline.get("mime_type", "image/png")
+                mime = inline.get("mimeType") or inline.get("mime_type", "image/png")
                 print(f"  ✓ Gemini generated image ({len(image_bytes) // 1024}KB, {mime})")
 
                 # Compress to WebP and upload to Firebase Storage
