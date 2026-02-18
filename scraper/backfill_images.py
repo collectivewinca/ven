@@ -103,15 +103,15 @@ def generate_image(title: str, artist: str, genre: str) -> bytes | None:
 
 
 def compress_and_upload(image_bytes: bytes, title: str) -> str | None:
-    """Compress raw bytes to WebP, upload to Firebase Storage."""
-    if not _storage_bucket:
-        print("  ⚠ No Firebase Storage bucket — cannot upload")
-        return None
+    """Compress raw bytes to WebP. Upload to Firebase Storage if available,
+    otherwise return a data URI for direct embedding."""
     try:
         from PIL import Image
 
         img = Image.open(io.BytesIO(image_bytes))
-        max_width = 800
+        max_width = 800 if _storage_bucket else 600
+        quality = 80 if _storage_bucket else 65
+
         if img.width > max_width:
             ratio = max_width / img.width
             img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
@@ -119,21 +119,32 @@ def compress_and_upload(image_bytes: bytes, title: str) -> str | None:
             img = img.convert("RGB")
 
         buf = io.BytesIO()
-        img.save(buf, format="WEBP", quality=80)
+        img.save(buf, format="WEBP", quality=quality)
         webp_bytes = buf.getvalue()
 
-        slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
-        digest = hashlib.sha1(image_bytes[:256]).hexdigest()[:12]
-        storage_path = f"article-images/{slug}-{digest}.webp"
+        # Try Firebase Storage first
+        if _storage_bucket:
+            try:
+                slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
+                digest = hashlib.sha1(image_bytes[:256]).hexdigest()[:12]
+                storage_path = f"article-images/{slug}-{digest}.webp"
 
-        blob = _storage_bucket.blob(storage_path)
-        blob.upload_from_string(webp_bytes, content_type="image/webp")
-        blob.make_public()
+                blob = _storage_bucket.blob(storage_path)
+                blob.upload_from_string(webp_bytes, content_type="image/webp")
+                blob.make_public()
 
-        print(f"  ✓ Uploaded ({len(webp_bytes) // 1024}KB): {storage_path}")
-        return blob.public_url
+                print(f"  ✓ Uploaded ({len(webp_bytes) // 1024}KB): {storage_path}")
+                return blob.public_url
+            except Exception as e:
+                print(f"  ⚠ Storage upload failed, using data URI: {e}")
+
+        # Fallback: return data URI
+        b64 = base64.b64encode(webp_bytes).decode()
+        data_uri = f"data:image/webp;base64,{b64}"
+        print(f"  ✓ Generated data URI ({len(webp_bytes) // 1024}KB)")
+        return data_uri
     except Exception as e:
-        print(f"  ⚠ Upload failed: {e}")
+        print(f"  ⚠ Compression failed: {e}")
         return None
 
 

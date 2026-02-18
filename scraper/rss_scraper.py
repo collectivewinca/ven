@@ -515,14 +515,22 @@ class RSSScraper:
     def _compress_and_upload_bytes(
         self, image_bytes: bytes, title: str
     ) -> Optional[str]:
-        """Compress raw image bytes to WebP and upload to Firebase Storage."""
-        if not _storage_bucket:
-            return None
+        """Compress raw image bytes to WebP. Upload to Firebase Storage if
+        available, otherwise return a data URI for direct embedding."""
         try:
             from PIL import Image
 
             img = Image.open(io.BytesIO(image_bytes))
-            max_width = 800
+
+            # Try Firebase Storage first (higher quality)
+            if _storage_bucket:
+                max_width = 800
+                quality = 80
+            else:
+                # Data URI fallback: smaller for Firestore field limits
+                max_width = 600
+                quality = 65
+
             if img.width > max_width:
                 ratio = max_width / img.width
                 img = img.resize(
@@ -532,28 +540,44 @@ class RSSScraper:
                 img = img.convert("RGB")
 
             buf = io.BytesIO()
-            img.save(buf, format="WEBP", quality=80)
+            img.save(buf, format="WEBP", quality=quality)
             webp_bytes = buf.getvalue()
 
-            slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
-            digest = hashlib.sha1(image_bytes[:256]).hexdigest()[:12]
-            storage_path = f"article-images/{slug}-{digest}.webp"
+            # Attempt Firebase Storage upload
+            if _storage_bucket:
+                try:
+                    slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
+                    digest = hashlib.sha1(image_bytes[:256]).hexdigest()[:12]
+                    storage_path = f"article-images/{slug}-{digest}.webp"
 
-            blob = _storage_bucket.blob(storage_path)
-            blob.upload_from_string(webp_bytes, content_type="image/webp")
-            blob.make_public()
+                    blob = _storage_bucket.blob(storage_path)
+                    blob.upload_from_string(webp_bytes, content_type="image/webp")
+                    blob.make_public()
 
-            print(f"  ✓ Uploaded image ({len(webp_bytes) // 1024}KB): {storage_path}")
+                    print(f"  ✓ Uploaded image ({len(webp_bytes) // 1024}KB): {storage_path}")
+                    self._log_event(
+                        "image_uploaded",
+                        storage_path=storage_path,
+                        size_kb=len(webp_bytes) // 1024,
+                    )
+                    return blob.public_url
+                except Exception as e:
+                    print(f"  ⚠ Storage upload failed, using data URI: {e}")
+
+            # Fallback: return data URI (works directly in <img> tags)
+            b64 = base64.b64encode(webp_bytes).decode()
+            data_uri = f"data:image/webp;base64,{b64}"
+            print(f"  ✓ Generated data URI ({len(webp_bytes) // 1024}KB)")
             self._log_event(
-                "image_uploaded",
-                storage_path=storage_path,
+                "image_data_uri",
                 size_kb=len(webp_bytes) // 1024,
             )
-            return blob.public_url
+            return data_uri
+
         except Exception as e:
-            print(f"  ⚠ Image compress/upload failed: {e}")
+            print(f"  ⚠ Image compression failed: {e}")
             self._log_event(
-                "image_upload_failed",
+                "image_compress_failed",
                 level="warning",
                 error=str(e),
             )
