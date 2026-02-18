@@ -2,6 +2,71 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
 import { Bookmark, Share2, Mail, Heart, Music, X, ChevronUp, ChevronDown, ExternalLink, RefreshCw, Smartphone, MessageSquare, Send, Menu } from 'lucide-react';
 
+// Image cache: docId -> image URL (persists across re-renders)
+const imageCache = new Map<string, string>();
+
+const FIRESTORE_BASE = 'https://firestore.googleapis.com/v1/projects';
+const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'miny-ven';
+
+// Lazy image component that fetches image_url on demand
+function LazyArticleImage({ articleId, imageSource, className }: {
+  articleId: string;
+  imageSource?: string;
+  className?: string;
+}) {
+  const [src, setSrc] = useState<string>(() => imageCache.get(articleId) || '');
+  const [loading, setLoading] = useState(!imageCache.has(articleId));
+  const fallback = '/branding/minylogo.png';
+
+  useEffect(() => {
+    if (imageCache.has(articleId)) {
+      setSrc(imageCache.get(articleId)!);
+      setLoading(false);
+      return;
+    }
+    // Skip fetch if we know there's no image
+    if (!imageSource || imageSource === 'none') {
+      setSrc(fallback);
+      setLoading(false);
+      imageCache.set(articleId, fallback);
+      return;
+    }
+    let cancelled = false;
+    const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
+    const params = new URLSearchParams();
+    if (apiKey) params.set('key', apiKey);
+    params.append('mask.fieldPaths', 'image_url');
+    const url = `${FIRESTORE_BASE}/${PROJECT_ID}/databases/(default)/documents/articles/${articleId}?${params}`;
+    fetch(url).then(r => r.json()).then(doc => {
+      if (cancelled) return;
+      const raw = doc?.fields?.image_url?.stringValue?.trim() || '';
+      const resolved = (raw && !raw.includes('images.unsplash.com')) ? raw : fallback;
+      imageCache.set(articleId, resolved);
+      setSrc(resolved);
+      setLoading(false);
+    }).catch(() => {
+      if (!cancelled) {
+        setSrc(fallback);
+        setLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [articleId, imageSource]);
+
+  if (loading) {
+    return <div className={`${className} bg-white/5 animate-pulse`} />;
+  }
+
+  return (
+    <img
+      src={src}
+      alt=""
+      className={className}
+      onError={(e) => { (e.target as HTMLImageElement).src = fallback; }}
+    />
+  );
+}
+
 // Loading skeleton component
 const ArticleSkeleton = () => (
   <div className="h-full flex flex-col p-4 sm:p-6 animate-pulse">
@@ -107,7 +172,14 @@ function App() {
       const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
       console.log('Fetching articles from REST API...');
 
-      // Paginate through all documents
+      // Fetch metadata only (exclude heavy image_url and full_content fields)
+      const metadataFields = [
+        'title', 'summary', 'source', 'source_url', 'primary_genre',
+        'secondary_genres', 'artist_names', 'image_source',
+        'published_at', 'read_time', 'share_count', 'email_count',
+        'bookmark_count', 'view_count'
+      ];
+
       let allDocs: any[] = [];
       let pageToken = '';
       while (true) {
@@ -115,6 +187,7 @@ function App() {
         if (apiKey) params.set('key', apiKey);
         params.set('pageSize', '300');
         if (pageToken) params.set('pageToken', pageToken);
+        metadataFields.forEach(f => params.append('mask.fieldPaths', f));
         const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/articles?${params}`;
         const response = await fetch(url);
         if (!response.ok) {
@@ -126,7 +199,7 @@ function App() {
         if (!pageToken) break;
       }
 
-      console.log(`REST API: fetched ${allDocs.length} total documents`);
+      console.log(`REST API: fetched ${allDocs.length} docs (metadata only)`);
 
       if (allDocs.length === 0) {
         setArticles([]);
@@ -161,7 +234,8 @@ function App() {
           primaryGenre: getField(fields.primary_genre) || '',
           secondaryGenres: getField(fields.secondary_genres) || [],
           artistNames: getField(fields.artist_names) || [],
-          imageUrl: getField(fields.image_url) || '',
+          imageUrl: '', // loaded lazily
+          imageSource: getField(fields.image_source) || '',
           publishedAt: new Date(getField(fields.published_at) || Date.now()),
           readTime: getField(fields.read_time) || 60,
           shareCount: getField(fields.share_count) || 0,
@@ -215,24 +289,6 @@ function App() {
   const filteredArticles = selectedGenre === 'all' 
     ? articles 
     : articles.filter(a => a.primaryGenre === selectedGenre);
-
-  const getFallbackImage = useCallback((genre?: string) => {
-    const map: Record<string, string> = {
-      gospel: '/branding/minylogo.png',
-      hiphop: '/branding/minylogo.png',
-      pop: '/branding/minylogo.png',
-      rock: '/branding/minylogo.png',
-      electronic: '/branding/minylogo.png',
-    };
-    return map[genre || ''] || '/branding/minylogo.png';
-  }, []);
-
-  const resolveArticleImage = useCallback((imageUrl?: string, genre?: string) => {
-    const raw = (imageUrl || '').trim();
-    if (!raw) return getFallbackImage(genre);
-    if (raw.includes('images.unsplash.com')) return getFallbackImage(genre);
-    return raw;
-  }, [getFallbackImage]);
 
   const currentArticle = filteredArticles[currentIndex];
 
@@ -525,15 +581,11 @@ function App() {
             ) : (
               <article className="overflow-hidden rounded-3xl border border-white/10 bg-black/45 shadow-2xl">
                 <div className="relative aspect-[16/9]">
-                  <img
-                    src={resolveArticleImage(currentArticle.imageUrl, currentArticle.primaryGenre)}
-                    alt={currentArticle.title}
+                  <LazyArticleImage
+                    articleId={currentArticle.id}
+                    imageSource={currentArticle.imageSource}
+
                     className="h-full w-full object-cover"
-                    loading="lazy"
-                    onError={(e) => {
-                      const el = e.currentTarget as HTMLImageElement;
-                      el.src = getFallbackImage(currentArticle.primaryGenre);
-                    }}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
                   <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
@@ -588,15 +640,11 @@ function App() {
                     }`}
                   >
                     <div className="relative aspect-[16/10]">
-                      <img
-                        src={resolveArticleImage(article.imageUrl, article.primaryGenre)}
-                        alt={article.title}
+                      <LazyArticleImage
+                        articleId={article.id}
+                        imageSource={article.imageSource}
+
                         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                        loading="lazy"
-                        onError={(e) => {
-                          const el = e.currentTarget as HTMLImageElement;
-                          el.src = getFallbackImage(article.primaryGenre);
-                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
                     </div>
@@ -744,17 +792,10 @@ function App() {
             <div className="min-h-full flex flex-col p-4 sm:p-6">
               {/* Image with Gradient Overlay - Smaller size with tags */}
               <div className="relative aspect-[16/9] mb-4 rounded-2xl sm:rounded-3xl overflow-hidden bg-gray-900 shadow-2xl card-hover group">
-                <img 
-                  src={resolveArticleImage(currentArticle.imageUrl, currentArticle.primaryGenre)}
-                  alt={currentArticle.title}
+                <LazyArticleImage
+                  articleId={currentArticle.id}
+                  imageSource={currentArticle.imageSource}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  loading="lazy"
-                  onError={(e) => {
-                    const el = e.currentTarget as HTMLImageElement;
-                    if (!el.src.endsWith('/branding/minylogo.png')) {
-                      el.src = getFallbackImage(currentArticle.primaryGenre);
-                    }
-                  }}
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
                 

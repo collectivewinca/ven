@@ -9,6 +9,7 @@ export interface MusicNewsArticle {
   secondaryGenres: string[];
   artistNames: string[];
   imageUrl?: string;
+  imageSource?: string;
   publishedAt: Date;
   readTime: number;
   shareCount: number;
