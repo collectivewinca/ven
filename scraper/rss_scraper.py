@@ -7,9 +7,11 @@ and Firestore REST API for storage.
 """
 
 import xml.etree.ElementTree as ET
+import base64
 import json
 import requests
 import re
+import io
 from datetime import datetime
 from typing import Optional, Dict, List, Set, Tuple
 from dataclasses import dataclass, asdict
@@ -61,6 +63,23 @@ if OPENAI_API_KEY:
         _openai_client = OpenAI(api_key=OPENAI_API_KEY)
     except ImportError:
         print("⚠ openai package not installed, OpenAI image generation disabled")
+
+# Firebase Storage (optional — used to persist AI-generated images)
+_storage_bucket = None
+FIREBASE_STORAGE_BUCKET = os.getenv("FIREBASE_STORAGE_BUCKET", "miny-ven.firebasestorage.app")
+FIREBASE_SA_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
+if FIREBASE_SA_B64:
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, storage
+
+        sa_info = json.loads(base64.b64decode(FIREBASE_SA_B64))
+        cred = credentials.Certificate(sa_info)
+        firebase_admin.initialize_app(cred, {"storageBucket": FIREBASE_STORAGE_BUCKET})
+        _storage_bucket = storage.bucket()
+        print(f"✓ Firebase Storage initialized (bucket: {FIREBASE_STORAGE_BUCKET})")
+    except Exception as e:
+        print(f"⚠ Firebase Storage init failed: {e}")
 
 # Configuration
 PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "miny-ven")
@@ -355,13 +374,64 @@ class RSSScraper:
             return None
         return None
 
+    def _compress_and_upload_image(
+        self, image_url: str, storage_path: str
+    ) -> Optional[str]:
+        """Download image, compress to WebP, upload to Firebase Storage."""
+        if not _storage_bucket:
+            return None
+        try:
+            from PIL import Image
+
+            resp = self.session.get(image_url, timeout=30)
+            if resp.status_code >= 400:
+                return None
+
+            img = Image.open(io.BytesIO(resp.content))
+            # Resize to max 800px wide, maintain aspect ratio
+            max_width = 800
+            if img.width > max_width:
+                ratio = max_width / img.width
+                img = img.resize(
+                    (max_width, int(img.height * ratio)), Image.LANCZOS
+                )
+            # Convert to RGB if needed (WebP doesn't support all modes)
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            buf = io.BytesIO()
+            img.save(buf, format="WEBP", quality=80)
+            webp_bytes = buf.getvalue()
+
+            blob = _storage_bucket.blob(storage_path)
+            blob.upload_from_string(webp_bytes, content_type="image/webp")
+            blob.make_public()
+
+            print(f"  ✓ Uploaded image ({len(webp_bytes)//1024}KB): {storage_path}")
+            self._log_event(
+                "image_uploaded",
+                storage_path=storage_path,
+                size_kb=len(webp_bytes) // 1024,
+            )
+            return blob.public_url
+        except Exception as e:
+            print(f"  ⚠ Image upload failed: {e}")
+            self._log_event(
+                "image_upload_failed",
+                level="warning",
+                storage_path=storage_path,
+                error=str(e),
+            )
+            return None
+
     def _generate_openai_image(
         self, title: str, artist: str, genre: str
     ) -> Optional[str]:
-        """Generate an image via OpenAI and return a hosted URL.
+        """Generate an image via OpenAI, compress, and upload to Firebase Storage.
 
-        Returns None if the model only provides base64 data (not suitable
-        for direct storage in Firestore image_url fields).
+        Returns a permanent public URL from Firebase Storage, or the raw
+        OpenAI URL as fallback if Storage is unavailable.  Returns None if
+        generation fails or the model only provides base64 data.
         """
         if not _openai_client:
             return None
@@ -376,7 +446,6 @@ class RSSScraper:
 
         # dall-e-3 supports: 1024x1024, 1024x1792, 1792x1024
         # gpt-image-1 supports: 1024x1024, 1536x1024, 1024x1536, auto
-        dalle3_sizes = {"1024x1024", "1024x1792", "1792x1024"}
         size = "1792x1024" if OPENAI_IMAGE_MODEL == "dall-e-3" else "1536x1024"
 
         try:
@@ -391,7 +460,12 @@ class RSSScraper:
 
             image_url = getattr(first, "url", None)
             if image_url:
-                return image_url
+                # Compress and upload to Firebase Storage for persistence
+                slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
+                digest = hashlib.sha1(image_url.encode()).hexdigest()[:12]
+                storage_path = f"article-images/{slug}-{digest}.webp"
+                permanent_url = self._compress_and_upload_image(image_url, storage_path)
+                return permanent_url or image_url  # fallback to temp URL
 
             # Guard: never return base64 data — it's too large for Firestore
             b64_data = getattr(first, "b64_json", None)
