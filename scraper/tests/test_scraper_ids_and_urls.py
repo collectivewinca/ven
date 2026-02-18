@@ -80,7 +80,7 @@ class TestRSSScraperReliabilityHelpers(unittest.TestCase):
         self.scraper._fetch_open_graph_image = lambda _: None
         self.scraper._is_valid_image_url = lambda _: False
         self.scraper._fetch_artist_image = lambda _: "https://cdn.example.com/artist.jpg"
-        self.scraper._generate_openai_image_data_url = lambda *_: "data:image/png;base64,abc"
+        self.scraper._generate_openai_image = lambda *_: "https://oaidalleapiprodscus.blob.core.windows.net/img.png"
 
         image_url, image_source = self.scraper.resolve_article_image(
             {"link": "https://example.com/story", "image": ""},
@@ -95,8 +95,8 @@ class TestRSSScraperReliabilityHelpers(unittest.TestCase):
         self.scraper._fetch_open_graph_image = lambda _: None
         self.scraper._is_valid_image_url = lambda _: False
         self.scraper._fetch_artist_image = lambda _: None
-        self.scraper._generate_openai_image_data_url = (
-            lambda *_: "data:image/png;base64,generated"
+        self.scraper._generate_openai_image = (
+            lambda *_: "https://oaidalleapiprodscus.blob.core.windows.net/generated.png"
         )
 
         image_url, image_source = self.scraper.resolve_article_image(
@@ -105,7 +105,7 @@ class TestRSSScraperReliabilityHelpers(unittest.TestCase):
             artist_names=[],
             primary_genre="pop",
         )
-        self.assertEqual(image_url, "data:image/png;base64,generated")
+        self.assertEqual(image_url, "https://oaidalleapiprodscus.blob.core.windows.net/generated.png")
         self.assertEqual(image_source, "ai_generated_openai")
 
 

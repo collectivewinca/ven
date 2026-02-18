@@ -53,7 +53,7 @@ if EXA_API_KEY:
 # OpenAI SDK (optional — used for AI image generation fallback)
 _openai_client = None
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
+OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "dall-e-3")
 if OPENAI_API_KEY:
     try:
         from openai import OpenAI
@@ -355,9 +355,14 @@ class RSSScraper:
             return None
         return None
 
-    def _generate_openai_image_data_url(
+    def _generate_openai_image(
         self, title: str, artist: str, genre: str
     ) -> Optional[str]:
+        """Generate an image via OpenAI and return a hosted URL.
+
+        Returns None if the model only provides base64 data (not suitable
+        for direct storage in Firestore image_url fields).
+        """
         if not _openai_client:
             return None
 
@@ -368,11 +373,17 @@ class RSSScraper:
             f"Genre context: {genre or 'mixed'}. "
             f"Headline context: {title[:180]}."
         )
+
+        # dall-e-3 supports: 1024x1024, 1024x1792, 1792x1024
+        # gpt-image-1 supports: 1024x1024, 1536x1024, 1024x1536, auto
+        dalle3_sizes = {"1024x1024", "1024x1792", "1792x1024"}
+        size = "1792x1024" if OPENAI_IMAGE_MODEL == "dall-e-3" else "1536x1024"
+
         try:
             generated = _openai_client.images.generate(
                 model=OPENAI_IMAGE_MODEL,
                 prompt=prompt,
-                size="1536x1024",
+                size=size,
             )
             first = (generated.data or [None])[0]
             if not first:
@@ -382,9 +393,16 @@ class RSSScraper:
             if image_url:
                 return image_url
 
+            # Guard: never return base64 data — it's too large for Firestore
             b64_data = getattr(first, "b64_json", None)
             if b64_data:
-                return f"data:image/png;base64,{b64_data}"
+                print(f"  ⚠ OpenAI ({OPENAI_IMAGE_MODEL}) returned b64 only, skipping")
+                self._log_event(
+                    "openai_image_b64_rejected",
+                    level="warning",
+                    model=OPENAI_IMAGE_MODEL,
+                )
+                return None
         except Exception as e:
             self._log_event(
                 "openai_image_generation_failed",
@@ -420,7 +438,7 @@ class RSSScraper:
             if artist_img:
                 return artist_img, "artist_api"
 
-        generated = self._generate_openai_image_data_url(
+        generated = self._generate_openai_image(
             title,
             artist_names[0] if artist_names else "",
             primary_genre,
