@@ -193,17 +193,21 @@ def find_articles_without_images() -> list[dict]:
 
             # Backfill if no image or image source is "none"
             if not image_url or image_source == "none":
+                fetched_at = fields.get("fetched_at", {}).get("stringValue", "")
                 docs.append({
                     "doc_id": doc_id,
                     "title": title,
                     "artist": artist,
                     "genre": genre,
+                    "fetched_at": fetched_at,
                 })
 
         page_token = data.get("nextPageToken", "")
         if not page_token:
             break
 
+    # Sort by most recent first
+    docs.sort(key=lambda d: d.get("fetched_at", ""), reverse=True)
     return docs
 
 
@@ -212,7 +216,10 @@ def main():
     print("=" * 50)
 
     docs = find_articles_without_images()
-    print(f"Found {len(docs)} articles needing images\n")
+    limit = int(os.getenv("BACKFILL_LIMIT", "0"))
+    if limit > 0:
+        docs = docs[:limit]
+    print(f"Found {len(docs)} articles to backfill\n")
 
     success = 0
     for doc in docs:
