@@ -52,17 +52,13 @@ if EXA_API_KEY:
     except ImportError:
         print("⚠ exa_py package not installed, Exa features disabled")
 
-# OpenAI SDK (optional — used for AI image generation fallback)
-_openai_client = None
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "dall-e-3")
-if OPENAI_API_KEY:
-    try:
-        from openai import OpenAI
-
-        _openai_client = OpenAI(api_key=OPENAI_API_KEY)
-    except ImportError:
-        print("⚠ openai package not installed, OpenAI image generation disabled")
+# Gemini API (optional — used for AI image generation fallback)
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
+if GEMINI_API_KEY:
+    print(f"✓ Gemini image generation enabled (model: {GEMINI_IMAGE_MODEL})")
+else:
+    print("⚠ GEMINI_API_KEY not set, AI image generation disabled")
 
 # Firebase Storage (optional — used to persist AI-generated images)
 _storage_bucket = None
@@ -424,16 +420,19 @@ class RSSScraper:
             )
             return None
 
-    def _generate_openai_image(
+    def _generate_gemini_image(
         self, title: str, artist: str, genre: str
     ) -> Optional[str]:
-        """Generate an image via OpenAI, compress, and upload to Firebase Storage.
+        """Generate an image via Gemini, compress to WebP, upload to Firebase Storage.
 
-        Returns a permanent public URL from Firebase Storage, or the raw
-        OpenAI URL as fallback if Storage is unavailable.  Returns None if
-        generation fails or the model only provides base64 data.
+        Uses the gemini-2.5-flash-image model which returns base64 data directly.
+        Requires Firebase Storage for persistence (base64 is too large for Firestore).
+        Returns a permanent public URL from Firebase Storage, or None on failure.
         """
-        if not _openai_client:
+        if not GEMINI_API_KEY:
+            return None
+        if not _storage_bucket:
+            print("  ⚠ Gemini image gen requires Firebase Storage — skipping")
             return None
 
         prompt = (
@@ -444,48 +443,120 @@ class RSSScraper:
             f"Headline context: {title[:180]}."
         )
 
-        # dall-e-3 supports: 1024x1024, 1024x1792, 1792x1024
-        # gpt-image-1 supports: 1024x1024, 1536x1024, 1024x1536, auto
-        size = "1792x1024" if OPENAI_IMAGE_MODEL == "dall-e-3" else "1536x1024"
+        api_url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{GEMINI_IMAGE_MODEL}:generateContent"
+        )
+        payload = json.dumps({
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseModalities": ["TEXT", "IMAGE"],
+            },
+        })
 
         try:
-            generated = _openai_client.images.generate(
-                model=OPENAI_IMAGE_MODEL,
-                prompt=prompt,
-                size=size,
+            resp = self.session.post(
+                api_url,
+                data=payload,
+                headers={
+                    "x-goog-api-key": GEMINI_API_KEY,
+                    "Content-Type": "application/json",
+                },
+                timeout=60,
             )
-            first = (generated.data or [None])[0]
-            if not first:
-                return None
-
-            image_url = getattr(first, "url", None)
-            if image_url:
-                # Compress and upload to Firebase Storage for persistence
-                slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
-                digest = hashlib.sha1(image_url.encode()).hexdigest()[:12]
-                storage_path = f"article-images/{slug}-{digest}.webp"
-                permanent_url = self._compress_and_upload_image(image_url, storage_path)
-                return permanent_url or image_url  # fallback to temp URL
-
-            # Guard: never return base64 data — it's too large for Firestore
-            b64_data = getattr(first, "b64_json", None)
-            if b64_data:
-                print(f"  ⚠ OpenAI ({OPENAI_IMAGE_MODEL}) returned b64 only, skipping")
+            if resp.status_code != 200:
+                print(f"  ⚠ Gemini API error: {resp.status_code} — {resp.text[:200]}")
                 self._log_event(
-                    "openai_image_b64_rejected",
+                    "gemini_image_generation_failed",
                     level="warning",
-                    model=OPENAI_IMAGE_MODEL,
+                    model=GEMINI_IMAGE_MODEL,
+                    status_code=resp.status_code,
+                    error=resp.text[:300],
                 )
                 return None
-        except Exception as e:
+
+            data = resp.json()
+            parts = (
+                data.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [])
+            )
+
+            # Find the inline_data part with image bytes
+            for part in parts:
+                inline = part.get("inline_data")
+                if not inline or not inline.get("data"):
+                    continue
+
+                image_bytes = base64.b64decode(inline["data"])
+                mime = inline.get("mime_type", "image/png")
+                print(f"  ✓ Gemini generated image ({len(image_bytes) // 1024}KB, {mime})")
+
+                # Compress to WebP and upload to Firebase Storage
+                return self._compress_and_upload_bytes(image_bytes, title)
+
+            print("  ⚠ Gemini response contained no image data")
             self._log_event(
-                "openai_image_generation_failed",
+                "gemini_image_no_data", level="warning", model=GEMINI_IMAGE_MODEL
+            )
+            return None
+
+        except Exception as e:
+            print(f"  ⚠ Gemini image generation failed: {e}")
+            self._log_event(
+                "gemini_image_generation_failed",
                 level="warning",
-                model=OPENAI_IMAGE_MODEL,
+                model=GEMINI_IMAGE_MODEL,
                 error=str(e),
             )
             return None
-        return None
+
+    def _compress_and_upload_bytes(
+        self, image_bytes: bytes, title: str
+    ) -> Optional[str]:
+        """Compress raw image bytes to WebP and upload to Firebase Storage."""
+        if not _storage_bucket:
+            return None
+        try:
+            from PIL import Image
+
+            img = Image.open(io.BytesIO(image_bytes))
+            max_width = 800
+            if img.width > max_width:
+                ratio = max_width / img.width
+                img = img.resize(
+                    (max_width, int(img.height * ratio)), Image.LANCZOS
+                )
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+
+            buf = io.BytesIO()
+            img.save(buf, format="WEBP", quality=80)
+            webp_bytes = buf.getvalue()
+
+            slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
+            digest = hashlib.sha1(image_bytes[:256]).hexdigest()[:12]
+            storage_path = f"article-images/{slug}-{digest}.webp"
+
+            blob = _storage_bucket.blob(storage_path)
+            blob.upload_from_string(webp_bytes, content_type="image/webp")
+            blob.make_public()
+
+            print(f"  ✓ Uploaded image ({len(webp_bytes) // 1024}KB): {storage_path}")
+            self._log_event(
+                "image_uploaded",
+                storage_path=storage_path,
+                size_kb=len(webp_bytes) // 1024,
+            )
+            return blob.public_url
+        except Exception as e:
+            print(f"  ⚠ Image compress/upload failed: {e}")
+            self._log_event(
+                "image_upload_failed",
+                level="warning",
+                error=str(e),
+            )
+            return None
 
     def resolve_article_image(
         self,
@@ -512,13 +583,13 @@ class RSSScraper:
             if artist_img:
                 return artist_img, "artist_api"
 
-        generated = self._generate_openai_image(
+        generated = self._generate_gemini_image(
             title,
             artist_names[0] if artist_names else "",
             primary_genre,
         )
         if generated:
-            return generated, "ai_generated_openai"
+            return generated, "ai_generated_gemini"
 
         return "", "none"
 
