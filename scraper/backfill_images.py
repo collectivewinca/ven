@@ -37,7 +37,7 @@ if FIREBASE_SA_B64:
         sa_info = json.loads(base64.b64decode(FIREBASE_SA_B64))
         cred = credentials.Certificate(sa_info)
         firebase_admin.initialize_app(
-            cred, {"storageBucket": "miny-ven.firebasestorage.app"}
+            cred, {"storageBucket": "miny-ven.appspot.com"}
         )
         _storage_bucket = storage.bucket()
         print("✓ Firebase Storage initialized")

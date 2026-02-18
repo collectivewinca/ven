@@ -62,7 +62,7 @@ else:
 
 # Firebase Storage (optional — used to persist AI-generated images)
 _storage_bucket = None
-FIREBASE_STORAGE_BUCKET = os.getenv("FIREBASE_STORAGE_BUCKET", "miny-ven.firebasestorage.app")
+FIREBASE_STORAGE_BUCKET = os.getenv("FIREBASE_STORAGE_BUCKET", "miny-ven.appspot.com")
 FIREBASE_SA_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
 if FIREBASE_SA_B64:
     try:
