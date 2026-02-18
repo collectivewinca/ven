@@ -105,27 +105,37 @@ function App() {
       // Use REST API directly to avoid Firestore client issues
       const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'miny-ven';
       const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-      const apiKeyParam = apiKey ? `?key=${apiKey}` : '';
-      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/articles${apiKeyParam}`;
-      
       console.log('Fetching articles from REST API...');
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+
+      // Paginate through all documents
+      let allDocs: any[] = [];
+      let pageToken = '';
+      while (true) {
+        const params = new URLSearchParams();
+        if (apiKey) params.set('key', apiKey);
+        params.set('pageSize', '300');
+        if (pageToken) params.set('pageToken', pageToken);
+        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/articles?${params}`;
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        allDocs = allDocs.concat(data.documents || []);
+        pageToken = data.nextPageToken || '';
+        if (!pageToken) break;
       }
-      
-      const data = await response.json();
-      console.log('REST API response:', data);
-      
-      if (!data.documents) {
+
+      console.log(`REST API: fetched ${allDocs.length} total documents`);
+
+      if (allDocs.length === 0) {
         setArticles([]);
         setToast('No articles found.');
         setLoading(false);
         return;
       }
       
-      const fetchedArticles: MusicNewsArticle[] = data.documents.map((doc: any) => {
+      const fetchedArticles: MusicNewsArticle[] = allDocs.map((doc: any) => {
         const fields = doc.fields;
         const docId = doc.name.split('/').pop();
         
