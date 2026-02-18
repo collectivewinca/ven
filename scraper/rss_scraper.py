@@ -522,14 +522,9 @@ class RSSScraper:
 
             img = Image.open(io.BytesIO(image_bytes))
 
-            # Try Firebase Storage first (higher quality)
-            if _storage_bucket:
-                max_width = 800
-                quality = 80
-            else:
-                # Data URI fallback: smaller for Firestore field limits
-                max_width = 600
-                quality = 65
+            # 800px covers desktop hero (780px rendered width)
+            max_width = 800
+            quality = 80 if _storage_bucket else 70
 
             if img.width > max_width:
                 ratio = max_width / img.width

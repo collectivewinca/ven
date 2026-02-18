@@ -109,8 +109,8 @@ def compress_and_upload(image_bytes: bytes, title: str) -> str | None:
         from PIL import Image
 
         img = Image.open(io.BytesIO(image_bytes))
-        max_width = 800 if _storage_bucket else 600
-        quality = 80 if _storage_bucket else 65
+        max_width = 800
+        quality = 80 if _storage_bucket else 70
 
         if img.width > max_width:
             ratio = max_width / img.width
