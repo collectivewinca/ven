@@ -1403,6 +1403,95 @@ New CTA Headline:"""
         return processed, len(items)
 
     # ------------------------------------------------------------------
+    # Archive stale articles
+    # ------------------------------------------------------------------
+
+    ARCHIVE_HOURS = int(os.getenv("ARCHIVE_AFTER_HOURS", "72"))
+
+    def archive_stale_articles(self) -> int:
+        """Move articles older than ARCHIVE_HOURS to articles_archive."""
+        if not API_KEY:
+            return 0
+
+        cutoff = datetime.utcnow() - __import__("datetime").timedelta(hours=self.ARCHIVE_HOURS)
+        print(f"\n🗄  Archiving articles older than {self.ARCHIVE_HOURS}h (before {cutoff.isoformat()}Z)...")
+
+        page_token = ""
+        archived = 0
+        errors = 0
+
+        while True:
+            try:
+                token_param = f"&pageToken={page_token}" if page_token else ""
+                url = f"{FIRESTORE_URL}/articles?key={API_KEY}&pageSize=200{token_param}"
+                response = self.session.get(url, timeout=15)
+                if response.status_code != 200:
+                    print(f"  ⚠ Could not list articles for archiving: {response.status_code}")
+                    break
+
+                data = response.json()
+                docs = data.get("documents", [])
+                if not docs:
+                    break
+
+                for doc in docs:
+                    fields = doc.get("fields", {})
+                    doc_path = doc.get("name", "")
+                    doc_id = doc_path.split("/")[-1]
+
+                    # Determine age from fetched_at or published_at
+                    ts_str = (
+                        fields.get("fetched_at", {}).get("stringValue", "")
+                        or fields.get("published_at", {}).get("stringValue", "")
+                    )
+                    if not ts_str:
+                        continue
+
+                    try:
+                        ts = datetime.fromisoformat(ts_str.replace("Z", "+00:00"))
+                        ts_naive = ts.replace(tzinfo=None)
+                    except Exception:
+                        continue
+
+                    if ts_naive >= cutoff:
+                        continue
+
+                    # Ensure required fields exist for archive write
+                    if "image_source" not in fields:
+                        fields["image_source"] = {"stringValue": "unknown"}
+
+                    # Copy to articles_archive
+                    archive_url = f"{FIRESTORE_URL}/articles_archive/{doc_id}?key={API_KEY}"
+                    archive_payload = {"fields": fields}
+                    try:
+                        resp = requests.patch(archive_url, json=archive_payload, timeout=10)
+                        if resp.status_code not in (200, 201):
+                            errors += 1
+                            continue
+
+                        # Delete from articles
+                        delete_url = f"{FIRESTORE_URL}/articles/{doc_id}?key={API_KEY}"
+                        del_resp = requests.delete(delete_url, timeout=10)
+                        if del_resp.status_code in (200, 204):
+                            archived += 1
+                        else:
+                            errors += 1
+                    except Exception as e:
+                        errors += 1
+                        continue
+
+                page_token = data.get("nextPageToken", "")
+                if not page_token:
+                    break
+            except Exception as e:
+                print(f"  ⚠ Archive error: {e}")
+                break
+
+        print(f"  Archived {archived} articles ({errors} errors)")
+        self._log_event("archive_complete", archived=archived, errors=errors)
+        return archived
+
+    # ------------------------------------------------------------------
     # Main run
     # ------------------------------------------------------------------
 
@@ -1461,6 +1550,14 @@ New CTA Headline:"""
         except Exception as e:
             print(f"  ✗ Error with Exa discovery: {e}")
             self._log_event("source_failed", level="error", source="exa_discovery", error=str(e))
+
+        # 3. Archive stale articles
+        try:
+            archived_count = self.archive_stale_articles()
+            source_stats["archive"] = {"archived": archived_count}
+        except Exception as e:
+            print(f"  ✗ Error archiving: {e}")
+            self._log_event("archive_failed", level="error", error=str(e))
 
         print("\n" + "=" * 50)
         print(f"Fetched {total_fetched_items} feed items")

@@ -95,6 +95,12 @@ service cloud.firestore {
     match /articles/{articleId} {
       allow read: if true;
       allow create, update: if request.auth != null || isConstrainedScraperWrite();
+      allow delete: if true;
+    }
+
+    match /articles_archive/{articleId} {
+      allow read: if true;
+      allow create, update: if request.auth != null || isConstrainedScraperWrite();
       allow delete: if request.auth != null;
     }
 
