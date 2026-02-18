@@ -153,6 +153,8 @@ FIREBASE_PROJECT_ID=miny-ven
 PERPLEXITY_API_KEY=         # CTA headlines + research fallback (model: sonar)
 DEEPSEEK_API_KEY=           # 60-word summaries (model: deepseek-chat)
 EXA_API_KEY=                # Article research + news discovery
+OPENAI_API_KEY=             # AI image generation fallback (model: gpt-image-1)
+OPENAI_IMAGE_MODEL=gpt-image-1
 ```
 
 ### GitHub Actions Secrets
@@ -161,6 +163,7 @@ FIREBASE_API_KEY
 DEEPSEEK_API_KEY
 PERPLEXITY_API_KEY
 EXA_API_KEY
+OPENAI_API_KEY
 ```
 
 ### Vercel (for Quo SMS API)
@@ -213,6 +216,7 @@ Authenticated users have full read/write/delete access.
 - **Added**: Refusal guard — regex filter catches 15+ AI meta-commentary patterns
 - **Migrated**: Perplexity from raw HTTP to official SDK, model `sonar`
 - **Added**: `_clean_perplexity_text()` — strips markdown bold and citation brackets
+- **Added**: OpenAI image generation fallback for articles missing feed/OG/artist images
 - **Updated**: GitHub Actions workflow — added `EXA_API_KEY`, removed `OPENROUTER_API_KEY`
 - **Deployed**: Vercel production at https://ven.minyvinyl.com
 

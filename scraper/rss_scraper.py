@@ -17,7 +17,7 @@ import os
 import sys
 import hashlib
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit, urljoin, quote
+from urllib.parse import urlsplit, urlunsplit, urljoin
 from email.utils import parsedate_to_datetime
 
 # Load environment variables
@@ -49,6 +49,18 @@ if EXA_API_KEY:
         _exa_client = Exa(api_key=EXA_API_KEY)
     except ImportError:
         print("⚠ exa_py package not installed, Exa features disabled")
+
+# OpenAI SDK (optional — used for AI image generation fallback)
+_openai_client = None
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+OPENAI_IMAGE_MODEL = os.getenv("OPENAI_IMAGE_MODEL", "gpt-image-1")
+if OPENAI_API_KEY:
+    try:
+        from openai import OpenAI
+
+        _openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    except ImportError:
+        print("⚠ openai package not installed, OpenAI image generation disabled")
 
 # Configuration
 PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "miny-ven")
@@ -343,16 +355,45 @@ class RSSScraper:
             return None
         return None
 
-    def _build_ai_image_url(self, title: str, artist: str, genre: str) -> str:
+    def _generate_openai_image_data_url(
+        self, title: str, artist: str, genre: str
+    ) -> Optional[str]:
+        if not _openai_client:
+            return None
+
         prompt = (
-            f"Editorial music cover art, cinematic, high contrast lighting, "
-            f"artist {artist or 'unknown'}, genre {genre or 'mixed'}, headline {title[:120]}"
+            "Create a photorealistic editorial hero image for a music news card. "
+            "No text, no logo, no watermark, no collage. "
+            f"Artist focus: {artist or 'unknown artist'}. "
+            f"Genre context: {genre or 'mixed'}. "
+            f"Headline context: {title[:180]}."
         )
-        return (
-            "https://image.pollinations.ai/prompt/"
-            + quote(prompt, safe="")
-            + "?width=1200&height=675&model=flux&nologo=true"
-        )
+        try:
+            generated = _openai_client.images.generate(
+                model=OPENAI_IMAGE_MODEL,
+                prompt=prompt,
+                size="1536x1024",
+            )
+            first = (generated.data or [None])[0]
+            if not first:
+                return None
+
+            image_url = getattr(first, "url", None)
+            if image_url:
+                return image_url
+
+            b64_data = getattr(first, "b64_json", None)
+            if b64_data:
+                return f"data:image/png;base64,{b64_data}"
+        except Exception as e:
+            self._log_event(
+                "openai_image_generation_failed",
+                level="warning",
+                model=OPENAI_IMAGE_MODEL,
+                error=str(e),
+            )
+            return None
+        return None
 
     def resolve_article_image(
         self,
@@ -379,7 +420,15 @@ class RSSScraper:
             if artist_img:
                 return artist_img, "artist_api"
 
-        return self._build_ai_image_url(title, artist_names[0] if artist_names else "", primary_genre), "ai_generated"
+        generated = self._generate_openai_image_data_url(
+            title,
+            artist_names[0] if artist_names else "",
+            primary_genre,
+        )
+        if generated:
+            return generated, "ai_generated_openai"
+
+        return "", "none"
 
     def summarize_with_deepseek(self, title: str, content: str) -> str:
         """Summarize article to exactly 60 words using DeepSeek API"""

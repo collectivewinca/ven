@@ -76,6 +76,38 @@ class TestRSSScraperReliabilityHelpers(unittest.TestCase):
             self.scraper._build_doc_id(changed),
         )
 
+    def test_resolve_article_image_prefers_artist_api_before_ai(self):
+        self.scraper._fetch_open_graph_image = lambda _: None
+        self.scraper._is_valid_image_url = lambda _: False
+        self.scraper._fetch_artist_image = lambda _: "https://cdn.example.com/artist.jpg"
+        self.scraper._generate_openai_image_data_url = lambda *_: "data:image/png;base64,abc"
+
+        image_url, image_source = self.scraper.resolve_article_image(
+            {"link": "https://example.com/story", "image": ""},
+            title="Story",
+            artist_names=["Artist"],
+            primary_genre="pop",
+        )
+        self.assertEqual(image_url, "https://cdn.example.com/artist.jpg")
+        self.assertEqual(image_source, "artist_api")
+
+    def test_resolve_article_image_uses_openai_when_others_missing(self):
+        self.scraper._fetch_open_graph_image = lambda _: None
+        self.scraper._is_valid_image_url = lambda _: False
+        self.scraper._fetch_artist_image = lambda _: None
+        self.scraper._generate_openai_image_data_url = (
+            lambda *_: "data:image/png;base64,generated"
+        )
+
+        image_url, image_source = self.scraper.resolve_article_image(
+            {"link": "https://example.com/story", "image": ""},
+            title="Story",
+            artist_names=[],
+            primary_genre="pop",
+        )
+        self.assertEqual(image_url, "data:image/png;base64,generated")
+        self.assertEqual(image_source, "ai_generated_openai")
+
 
 class TestRedditScraperReliabilityHelpers(unittest.TestCase):
     def setUp(self):
