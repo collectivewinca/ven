@@ -7,6 +7,12 @@
 - **App**: https://ven.minyvinyl.com
 - **Aliases**: https://minyven-news.vercel.app / https://miny-ven.vercel.app
 
+## Ops Docs
+
+- **Scraper Operations**: `README_SCRAPER_OPS.md`
+- **VM Runbook**: `RUNBOOK.md`
+- **CLI Reference**: `scraper/README_MINY_CLI.md`
+
 ## Features
 
 - **60-Word Summaries** — DeepSeek AI condenses every article to exactly 60 words
@@ -24,11 +30,11 @@
 ## Architecture
 
 ```
-                          hourly cron
+                     hourly cron (:05)
                               |
                     +---------v----------+
-                    | GitHub Actions CI  |
-                    |  scraper.yml       |
+                    | y0-minynet VM      |
+                    | miny CLI + cron    |
                     +---------+----------+
                               |
                     +---------v----------+
@@ -52,19 +58,19 @@
 ```
 
 ### Frontend
-- **Framework**: React 18 + TypeScript + Vite
+- **Framework**: React 19 + TypeScript + Vite
 - **Styling**: Tailwind CSS with glass-morphism design
 - **Data**: REST API calls to Firebase Firestore
 - **Hosting**: Vercel (manual deploy via `vercel --prod`)
 
 ### Scraper Pipeline
-- **Language**: Python 3.11+
+- **Language**: Python 3.12 (VM runtime)
 - **RSS Sources**: Jesusfreakhideout, Pitchfork News, Pitchfork Reviews, Rolling Stone, Billboard
 - **Exa Discovery**: 5 genre queries x 5 results — finds articles beyond RSS feeds
 - **Perplexity SDK** (`sonar` model): generates CTA headlines, article research (Exa fallback)
 - **DeepSeek API** (`deepseek-chat`): 60-word summaries
 - **Firestore REST API**: unauthenticated constrained writes (16 fields, strict validation)
-- **Automation**: GitHub Actions hourly cron + manual dispatch
+- **Automation**: VM cron (`miny run` hourly at `:05`) + optional manual GitHub Actions dispatch
 
 ### AI Fallback Chain
 | Step | Primary | Fallback |
@@ -109,14 +115,31 @@ cp .env.example .env
 python3 rss_scraper.py
 ```
 
+### 4. VM Operations CLI
+
+```bash
+cd scraper
+./miny --help
+
+# Common ops
+./miny status
+./miny deploy --all
+./miny logs --follow
+./miny metrics --period=24h
+```
+
 ## Project Structure
 
 ```
 miny-ven/
 ├── .github/workflows/
-│   └── scraper.yml            # Hourly cron + preflight + freshness guard
+│   └── scraper.yml            # Manual fallback run in GitHub Actions
+├── RUNBOOK.md                 # VM operations runbook
 ├── scraper/
 │   ├── rss_scraper.py         # Main scraper (RSS + Exa + AI pipeline)
+│   ├── miny_cli.py            # VM scraper management CLI
+│   ├── miny                   # Executable wrapper for miny_cli.py
+│   ├── README_MINY_CLI.md     # CLI command reference
 │   ├── requirements.txt       # Python deps (perplexityai, exa_py, etc.)
 │   ├── cleanup_duplicates.py  # Remove duplicate articles from Firestore
 │   ├── seed_firebase_rest.py  # Initial data seeding
@@ -153,8 +176,9 @@ FIREBASE_PROJECT_ID=miny-ven
 PERPLEXITY_API_KEY=         # CTA headlines + research fallback (model: sonar)
 DEEPSEEK_API_KEY=           # 60-word summaries (model: deepseek-chat)
 EXA_API_KEY=                # Article research + news discovery
-OPENAI_API_KEY=             # AI image generation fallback (model: gpt-image-1)
-OPENAI_IMAGE_MODEL=gpt-image-1
+BRAVE_API_KEY=              # Librarium provider
+GEMINI_API_KEY=             # AI image generation fallback (gemini-2.5-flash-image)
+FIREBASE_SERVICE_ACCOUNT_B64= # Firebase Storage service account JSON (base64)
 ```
 
 ### GitHub Actions Secrets
@@ -163,7 +187,9 @@ FIREBASE_API_KEY
 DEEPSEEK_API_KEY
 PERPLEXITY_API_KEY
 EXA_API_KEY
-OPENAI_API_KEY
+BRAVE_API_KEY
+GEMINI_API_KEY
+FIREBASE_SERVICE_ACCOUNT_B64
 ```
 
 ### Vercel (for Quo SMS API)
@@ -175,9 +201,26 @@ QUO_AUTH_SCHEME=raw
 QUO_FROM=
 ```
 
-## GitHub Actions Workflow
+## Scraper Operations (VM-first)
 
-The `scraper.yml` workflow runs hourly and includes:
+Primary runtime is VM cron:
+
+```cron
+5 * * * * /usr/bin/flock -n /home/exedev/miny-ven/scraper/.rss_scraper.lock /bin/bash -lc 'MINY_LOCAL_MODE=1 /home/exedev/bin/miny run'
+```
+
+Primary commands:
+
+```bash
+MINY_LOCAL_MODE=1 /home/exedev/bin/miny status
+MINY_LOCAL_MODE=1 /home/exedev/bin/miny run
+MINY_LOCAL_MODE=1 /home/exedev/bin/miny logs --follow
+MINY_LOCAL_MODE=1 /home/exedev/bin/miny rollback
+```
+
+## GitHub Actions Workflow (Manual Fallback)
+
+The `scraper.yml` workflow is manual (`workflow_dispatch`) and includes:
 
 1. **Preflight** — verifies Firestore is reachable before scraping
 2. **RSS Scraper** — fetches 5 feeds + Exa discovery + AI processing
@@ -208,6 +251,12 @@ Unauthenticated scraper writes are constrained to:
 Authenticated users have full read/write/delete access.
 
 ## Changelog
+
+### 2026-02-25
+- **Added**: VM-first scraper operations CLI (`scraper/miny_cli.py`) with `run/logs/status/deploy/rollback/metrics/cron`
+- **Updated**: Scheduler source of truth moved to VM cron (`:05`) with lockfile guard (`flock`)
+- **Updated**: GitHub Actions scraper workflow to manual fallback only (`workflow_dispatch`)
+- **Added**: VM runbook (`RUNBOOK.md`) and scraper ops overview (`README_SCRAPER_OPS.md`)
 
 ### 2026-02-13
 - **Fixed**: Firestore 403 — removed `id` field from payload (rules enforce exactly 16 fields)

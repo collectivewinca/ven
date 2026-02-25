@@ -1,9 +1,6 @@
-name: Hourly RSS Scraper
+name: Manual RSS Scraper
 
 on:
-  schedule:
-    # Run every hour
-    - cron: '0 * * * *'
   workflow_dispatch: # Allow manual trigger
 
 jobs:
@@ -19,11 +16,17 @@ jobs:
       with:
         python-version: '3.11'
     
+    - name: Set up Node.js (for librarium)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
     - name: Install dependencies
       run: |
         cd scraper
         pip install -r requirements.txt
         pip install python-dotenv
+        npm install -g librarium
 
     - name: Preflight Firestore access
       env:
@@ -61,6 +64,7 @@ jobs:
         PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
         EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
         SCRAPER_ARTIFACT_DIR: artifacts
       run: |
         cd scraper
