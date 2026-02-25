@@ -549,7 +549,7 @@ function App() {
                 </div>
                 <div>
                   <h1 className="text-2xl font-black tracking-tight">y0</h1>
-                  <p className="text-xs uppercase tracking-[0.22em] text-white/50">Live Music Intelligence</p>
+                  <p className="text-xs uppercase tracking-[0.18em] text-white/65">Live Music Intelligence</p>
                 </div>
               </div>
 
@@ -585,7 +585,7 @@ function App() {
                   className={`rounded-full px-4 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
                     selectedGenre === genre.id
                       ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg`
-                      : 'border border-white/20 bg-white/5 text-white/70 hover:bg-white/10'
+                      : 'border border-white/20 bg-white/5 text-white/85 hover:bg-white/10'
                   }`}
                 >
                   {genre.label}
@@ -600,7 +600,7 @@ function App() {
             {loading ? (
               <ArticleSkeleton />
             ) : !currentArticle ? (
-              <div className="rounded-3xl border border-white/10 bg-black/30 p-10 text-center text-white/60">
+              <div className="rounded-3xl border border-white/10 bg-black/30 p-10 text-center text-white/75">
                 No articles available
               </div>
             ) : (
@@ -613,7 +613,7 @@ function App() {
 
                     className="h-full w-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent" />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/10" />
                   <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
                     <span className={`rounded-full bg-gradient-to-r px-3 py-1 text-[11px] font-bold uppercase tracking-wider ${
                       genres.find(g => g.id === currentArticle.primaryGenre)?.gradient || 'from-gray-600 to-gray-500'
@@ -625,8 +625,8 @@ function App() {
                 </div>
                 <div className="space-y-3 p-6">
                   <h2 className="text-2xl font-extrabold leading-tight tracking-tight">{currentArticle.title}</h2>
-                  <p className="leading-relaxed text-white/75">{currentArticle.summary}</p>
-                  <div className="flex items-center justify-between pt-2 text-sm text-white/55">
+                  <p className="max-w-[68ch] leading-relaxed text-white/90">{currentArticle.summary}</p>
+                  <div className="flex items-center justify-between pt-2 text-sm text-white/70">
                     <span>{new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     <a
                       href={currentArticle.sourceUrl}
@@ -645,8 +645,8 @@ function App() {
 
           <aside className="col-span-12 lg:col-span-5">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-bold uppercase tracking-[0.2em] text-white/60">More Stories</h3>
-              <span className="text-xs text-white/40">{filteredArticles.length} total</span>
+              <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white/75">More Stories</h3>
+              <span className="text-xs text-white/60">{filteredArticles.length} total</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               {filteredArticles.map((article) => {
@@ -677,7 +677,7 @@ function App() {
                     </div>
                     <div className="space-y-1 p-3">
                       <p className="line-clamp-2 text-sm font-semibold leading-tight text-white">{article.title}</p>
-                      <p className="text-[11px] uppercase tracking-wider text-white/45">{article.source}</p>
+                      <p className="text-xs uppercase tracking-[0.08em] text-white/65">{article.source}</p>
                     </div>
                   </button>
                 );
@@ -694,8 +694,8 @@ function App() {
     <div className="h-full bg-black flex items-center justify-center safe-area-top safe-area-bottom">
       <div className="text-center px-4">
         <Music className="w-16 h-16 text-white/20 mx-auto mb-4" />
-        <p className="text-white/40 text-lg mb-2">No articles found</p>
-        <p className="text-white/20 text-sm">Run the scraper to populate Firebase with content</p>
+        <p className="text-white/70 text-lg mb-2">No articles found</p>
+        <p className="text-white/50 text-sm">Run the scraper to populate Firebase with content</p>
         <button 
           onClick={() => fetchArticles(selectedGenre)}
           className="mt-6 px-6 py-3 bg-white/10 rounded-full text-white hover:bg-white/20 transition-all"
@@ -717,7 +717,7 @@ function App() {
           </div>
           <div>
             <h1 className="text-base sm:text-lg font-bold tracking-tight">y0</h1>
-            <p className="text-[10px] sm:text-xs text-white/40">creator music intelligence</p>
+            <p className="text-xs text-white/60">creator music intelligence</p>
           </div>
         </div>
 
@@ -763,7 +763,7 @@ function App() {
                 className={`relative px-3 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-300 btn-press min-h-[36px] sm:min-h-[40px] ${
                   selectedGenre === genre.id 
                     ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg` 
-                    : 'bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80'
+                    : 'bg-white/5 text-white/75 hover:bg-white/10 hover:text-white'
                 }`}
                 style={{ animationDelay: `${index * 50}ms` }}
               >
@@ -773,7 +773,7 @@ function App() {
           </div>
           <button
             onClick={() => fetchArticles(selectedGenre)}
-            className="ml-2 p-2 rounded-full bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-all duration-300 min-w-[40px] min-h-[40px] flex items-center justify-center"
+            className="ml-2 p-2 rounded-full bg-white/5 text-white/75 hover:bg-white/10 hover:text-white transition-all duration-300 min-w-[40px] min-h-[40px] flex items-center justify-center"
             disabled={loading}
             aria-label="Refresh articles"
           >
@@ -825,16 +825,16 @@ function App() {
                   primaryGenre={currentArticle.primaryGenre}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/10" />
                 
                 {/* Genre Badge & Source - positioned on image */}
                 <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-gradient-to-r ${
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.08em] bg-gradient-to-r ${
                     genres.find(g => g.id === currentArticle.primaryGenre)?.gradient || 'from-gray-600 to-gray-500'
                   } text-white shadow-lg backdrop-blur-sm`}>
                     {currentArticle.primaryGenre}
                   </span>
-                  <span className="px-2.5 py-1 rounded-full text-[9px] sm:text-[10px] font-medium text-white/90 bg-black/40 backdrop-blur-sm">
+                  <span className="px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-medium text-white/95 bg-black/55 backdrop-blur-sm">
                     {currentArticle.source}
                   </span>
                 </div>
@@ -852,12 +852,12 @@ function App() {
               </h2>
 
               {/* Summary - Mobile Optimized */}
-              <p className="text-white/70 text-sm sm:text-base leading-relaxed mb-4 flex-1">
+              <p className="text-white/90 text-sm sm:text-base leading-relaxed mb-4 flex-1 max-w-[70ch]">
                 {currentArticle.summary}
               </p>
 
               {/* Meta Info - Mobile Optimized */}
-              <div className="flex items-center justify-between mb-4 text-xs sm:text-sm text-white/40">
+              <div className="flex items-center justify-between mb-4 text-xs sm:text-sm text-white/65">
                 <div className="flex items-center gap-2 sm:gap-4">
                   <span>{new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { 
                     month: 'short', 
@@ -936,11 +936,11 @@ function App() {
 
       {/* Progress Bar - Mobile Optimized */}
       <div className="px-4 sm:px-6 py-3 sm:py-4 glass border-t border-white/5 shrink-0 safe-area-bottom">
-        <div className="flex justify-between items-center text-xs text-white/40 mb-2">
-          <span className="font-medium">
-            {currentIndex + 1} <span className="text-white/20">/</span> {filteredArticles.length}
-          </span>
-          <span className="text-white/30 hidden sm:inline">Swipe to navigate</span>
+        <div className="flex justify-between items-center text-xs text-white/65 mb-2">
+            <span className="font-medium">
+              {currentIndex + 1} <span className="text-white/35">/</span> {filteredArticles.length}
+            </span>
+            <span className="text-white/50 hidden sm:inline">Swipe to navigate</span>
         </div>
         <div className="w-full bg-white/5 rounded-full h-1 sm:h-1.5 overflow-hidden">
           <div 
@@ -962,7 +962,7 @@ function App() {
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/10 glass shrink-0">
               <div>
                 <h2 className="text-lg sm:text-xl font-bold">Bookmarks</h2>
-                <p className="text-[10px] sm:text-xs text-white/40 mt-0.5">
+                <p className="text-xs text-white/60 mt-0.5">
                   {bookmarks.length} {bookmarks.length === 1 ? 'article' : 'articles'} saved
                 </p>
               </div>
@@ -982,8 +982,8 @@ function App() {
                   <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/5 flex items-center justify-center mb-4">
                     <Bookmark className="w-8 h-8 sm:w-10 sm:h-10 text-white/20" />
                   </div>
-                  <p className="text-white/40 text-base sm:text-lg font-medium mb-2">No bookmarks yet</p>
-                  <p className="text-white/20 text-xs sm:text-sm">Articles you bookmark will appear here</p>
+                  <p className="text-white/70 text-base sm:text-lg font-medium mb-2">No bookmarks yet</p>
+                  <p className="text-white/50 text-xs sm:text-sm">Articles you bookmark will appear here</p>
                 </div>
               ) : (
                 <div className="space-y-3 sm:space-y-4">
@@ -1000,7 +1000,7 @@ function App() {
                     >
                       <div className="flex items-start justify-between gap-3 sm:gap-4">
                         <div className="flex-1 min-w-0">
-                          <span className={`inline-block px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider mb-2 sm:mb-3 bg-gradient-to-r ${
+                          <span className={`inline-block px-2 sm:px-3 py-0.5 sm:py-1 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.08em] mb-2 sm:mb-3 bg-gradient-to-r ${
                             genres.find(g => g.id === article.primaryGenre)?.gradient || 'from-gray-600 to-gray-500'
                           } text-white`}>
                             {article.primaryGenre}
@@ -1008,7 +1008,7 @@ function App() {
                           <h3 className="text-white text-sm sm:text-base font-semibold leading-snug mb-1.5 sm:mb-2 line-clamp-2">
                             {article.title}
                           </h3>
-                          <p className="text-white/40 text-xs sm:text-sm line-clamp-2">
+                          <p className="text-white/65 text-xs sm:text-sm line-clamp-2">
                             {article.summary}
                           </p>
                         </div>
@@ -1050,7 +1050,7 @@ function App() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-white tracking-tight">y0</p>
-                  <p className="text-[11px] text-white/45">brand menu</p>
+                  <p className="text-[11px] text-white/65">brand menu</p>
                 </div>
               </div>
               <button
@@ -1063,48 +1063,84 @@ function App() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 flex items-center justify-between">
-              <img src="/branding/minylogo.png" alt="Miny logo" className="h-8 w-auto object-contain" />
-              <img src="/branding/velab-logo.png" alt="VE Lab logo" className="h-8 w-auto object-contain opacity-90" />
+              <div className="flex items-center gap-2">
+                <img src="/branding/minylogo.png" alt="Miny logo" className="h-8 w-auto object-contain" />
+                <span className="text-sm font-semibold text-white/90">miny</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <img src="/branding/velab-logo.png" alt="VE Lab logo" className="h-8 w-auto object-contain opacity-90" />
+                <span className="text-sm font-semibold text-white/90">VE Lab</span>
+              </div>
             </div>
 
-            <nav className="space-y-2">
-              <a
-                href="https://minyvinyl.com"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center rounded-xl p-3 text-white/85 hover:bg-white/10"
-                aria-label="Open Miny Vinyl"
-                title="Open Miny Vinyl"
-              >
-                <img src="/branding/minylogo.png" alt="" className="h-6 w-6 object-contain" />
-              </a>
-              <a
-                href="https://velab.org"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center rounded-xl p-3 text-white/85 hover:bg-white/10"
-                aria-label="Open VE Lab"
-                title="Open VE Lab"
-              >
-                <img src="/branding/velab-logo.png" alt="" className="h-6 w-6 object-contain" />
-              </a>
-            </nav>
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-white/65">Explore</p>
+              <nav className="space-y-2">
+                <a
+                  href="https://minyvinyl.com"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white/90 transition hover:bg-white/10"
+                  aria-label="Open Miny Vinyl"
+                >
+                  <span className="flex items-center gap-3">
+                    <img src="/branding/minylogo.png" alt="" className="h-6 w-6 object-contain" />
+                    <span>
+                      <span className="block text-sm font-semibold">Miny Vinyl</span>
+                      <span className="block text-xs text-white/65">Main platform</span>
+                    </span>
+                  </span>
+                  <ExternalLink className="h-4 w-4 text-white/70" />
+                </a>
+                <a
+                  href="https://velab.org"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-3 text-white/90 transition hover:bg-white/10"
+                  aria-label="Open VE Lab"
+                >
+                  <span className="flex items-center gap-3">
+                    <img src="/branding/velab-logo.png" alt="" className="h-6 w-6 object-contain" />
+                    <span>
+                      <span className="block text-sm font-semibold">VE Lab</span>
+                      <span className="block text-xs text-white/65">Studio + research</span>
+                    </span>
+                  </span>
+                  <ExternalLink className="h-4 w-4 text-white/70" />
+                </a>
+              </nav>
+            </div>
 
-            <div className="mt-auto">
+            <div className="mt-auto space-y-2">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-white/65">Actions</p>
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
                       setShowMenu(false);
                       setShowBookmarks(true);
                     }}
-                    className="w-11 h-11 rounded-xl bg-white/10 hover:bg-white/15 flex items-center justify-center"
+                    className="flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/10"
                     aria-label="Open bookmarks"
                   >
-                    <Bookmark className={`w-5 h-5 ${bookmarks.length > 0 ? 'text-yellow-400 fill-yellow-400' : 'text-white/80'}`} />
+                    <span className="inline-flex items-center gap-2">
+                      <Bookmark className={`w-4 h-4 ${bookmarks.length > 0 ? 'text-yellow-400 fill-yellow-400' : 'text-white/80'}`} />
+                      Bookmarks ({bookmarks.length})
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      fetchArticles(selectedGenre);
+                      setShowMenu(false);
+                    }}
+                    className="rounded-xl border border-white/10 bg-white/5 p-2.5 text-white/85 transition hover:bg-white/10"
+                    aria-label="Refresh feed"
+                  >
+                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
               </div>
+              <p className="text-xs text-white/55">Live music headlines from the miny-ven VM scraper.</p>
             </div>
           </div>
         </div>
@@ -1120,9 +1156,9 @@ function App() {
           <div className="absolute inset-x-4 top-1/2 -translate-y-1/2 mx-auto w-full max-w-md rounded-3xl border border-white/15 bg-black/90 p-5 shadow-2xl">
             <div className="mb-4">
               <h3 className="text-lg font-semibold text-white">Text This Link</h3>
-              <p className="mt-1 text-sm text-white/55">Send this article link using Quo API.</p>
+              <p className="mt-1 text-sm text-white/75">Send this article link using Quo API.</p>
             </div>
-            <label className="mb-2 block text-xs uppercase tracking-wide text-white/45">Phone Number</label>
+            <label className="mb-2 block text-xs uppercase tracking-wide text-white/65">Phone Number</label>
             <input
               value={smsPhone}
               onChange={(e) => setSmsPhone(e.target.value)}
