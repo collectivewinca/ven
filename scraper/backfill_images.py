@@ -11,12 +11,14 @@ import io
 import json
 import os
 import re
+import time
 import urllib.request
 
 import requests as req_lib
 
 try:
     from dotenv import load_dotenv
+
     load_dotenv()
 except ImportError:
     pass
@@ -24,6 +26,9 @@ except ImportError:
 FIREBASE_API_KEY = os.environ["FIREBASE_API_KEY"]
 GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
 GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
+FIREBASE_STORAGE_BUCKET = os.getenv(
+    "FIREBASE_STORAGE_BUCKET", "miny-ven.firebasestorage.app"
+)
 FIRESTORE_URL = "https://firestore.googleapis.com/v1/projects/miny-ven/databases/(default)/documents"
 
 # Firebase Storage
@@ -36,11 +41,26 @@ if FIREBASE_SA_B64:
 
         sa_info = json.loads(base64.b64decode(FIREBASE_SA_B64))
         cred = credentials.Certificate(sa_info)
-        firebase_admin.initialize_app(
-            cred, {"storageBucket": "miny-ven.appspot.com"}
-        )
-        _storage_bucket = storage.bucket()
-        print("✓ Firebase Storage initialized")
+        app = firebase_admin.initialize_app(cred)
+        bucket_candidates = []
+        if FIREBASE_STORAGE_BUCKET:
+            bucket_candidates.append(FIREBASE_STORAGE_BUCKET)
+        for candidate in ["miny-ven.firebasestorage.app", "miny-ven.appspot.com"]:
+            if candidate not in bucket_candidates:
+                bucket_candidates.append(candidate)
+
+        for candidate in bucket_candidates:
+            try:
+                test_bucket = storage.bucket(name=candidate, app=app)
+                if test_bucket.exists():
+                    _storage_bucket = test_bucket
+                    print(f"✓ Firebase Storage initialized (bucket: {candidate})")
+                    break
+            except Exception:
+                continue
+
+        if not _storage_bucket:
+            print("⚠ Firebase Storage bucket not found — using data URI fallback")
     except Exception as e:
         print(f"⚠ Firebase Storage init failed: {e}")
 else:
@@ -49,57 +69,73 @@ else:
 
 def generate_image(title: str, artist: str, genre: str) -> bytes | None:
     """Generate image via Gemini and return raw image bytes."""
-    prompt = (
-        "Create a photorealistic editorial hero image for a music news card. "
-        "No text, no logo, no watermark, no collage. "
-        f"Artist focus: {artist or 'unknown artist'}. "
-        f"Genre context: {genre or 'mixed'}. "
-        f"Headline context: {title[:180]}."
-    )
-
     api_url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
         f"{GEMINI_IMAGE_MODEL}:generateContent"
     )
-    payload = json.dumps({
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseModalities": ["TEXT", "IMAGE"],
-        },
-    }).encode()
+    prompt_attempts = [
+        (
+            "Create a photorealistic editorial hero image for a music news card. "
+            "No text, no logo, no watermark, no collage. "
+            f"Artist focus: {artist or 'unknown artist'}. "
+            f"Genre context: {genre or 'mixed'}. "
+            f"Headline context: {title[:180]}."
+        ),
+        (
+            "Generate a cinematic music-magazine hero photo. "
+            "Single scene, realistic lighting, no text overlays or logos. "
+            f"Genre: {genre or 'mixed'}. Artist cue: {artist or 'unknown artist'}."
+        ),
+        (
+            "Create an abstract-but-photoreal music atmosphere image for a news card. "
+            "No text, no logos, no collage. "
+            f"Theme: {genre or 'mixed'} music news."
+        ),
+    ]
 
-    req = urllib.request.Request(
-        api_url,
-        data=payload,
-        headers={
-            "x-goog-api-key": GEMINI_API_KEY,
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
+    for attempt, prompt in enumerate(prompt_attempts, start=1):
+        payload = json.dumps(
+            {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "responseModalities": ["TEXT", "IMAGE"],
+                },
+            }
+        ).encode()
 
-    try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            data = json.loads(resp.read())
-
-        parts = (
-            data.get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [])
+        req = urllib.request.Request(
+            api_url,
+            data=payload,
+            headers={
+                "x-goog-api-key": GEMINI_API_KEY,
+                "Content-Type": "application/json",
+            },
+            method="POST",
         )
-        for part in parts:
-            # REST API uses camelCase (inlineData/mimeType)
-            inline = part.get("inlineData") or part.get("inline_data")
-            if inline and inline.get("data"):
-                image_bytes = base64.b64decode(inline["data"])
-                print(f"  ✓ Gemini generated image ({len(image_bytes) // 1024}KB)")
-                return image_bytes
 
-        print("  FAILED: Gemini response contained no image data")
-        return None
-    except Exception as e:
-        print(f"  FAILED: Gemini error: {e}")
-        return None
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                data = json.loads(resp.read())
+
+            parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+            for part in parts:
+                inline = part.get("inlineData") or part.get("inline_data")
+                if inline and inline.get("data"):
+                    image_bytes = base64.b64decode(inline["data"])
+                    print(f"  ✓ Gemini generated image ({len(image_bytes) // 1024}KB)")
+                    return image_bytes
+
+            print(
+                f"  FAILED: Gemini response contained no image data (attempt {attempt})"
+            )
+            time.sleep(1.2)
+        except Exception as e:
+            print(f"  FAILED: Gemini error (attempt {attempt}): {e}")
+            if "API key" in str(e) or "expired" in str(e):
+                return None
+            time.sleep(1.2)
+
+    return None
 
 
 def compress_and_upload(image_bytes: bytes, title: str) -> str | None:
@@ -155,12 +191,14 @@ def patch_firestore(doc_id: str, image_url: str) -> bool:
         f"&updateMask.fieldPaths=image_url"
         f"&updateMask.fieldPaths=image_source"
     )
-    payload = json.dumps({
-        "fields": {
-            "image_url": {"stringValue": image_url},
-            "image_source": {"stringValue": "ai_generated_gemini"},
+    payload = json.dumps(
+        {
+            "fields": {
+                "image_url": {"stringValue": image_url},
+                "image_source": {"stringValue": "ai_generated_gemini"},
+            }
         }
-    }).encode()
+    ).encode()
     req = urllib.request.Request(url, data=payload, method="PATCH")
     req.add_header("Content-Type", "application/json")
     resp = urllib.request.urlopen(req, timeout=15)
@@ -174,7 +212,9 @@ def find_articles_without_images() -> list[dict]:
 
     while True:
         token_param = f"&pageToken={page_token}" if page_token else ""
-        url = f"{FIRESTORE_URL}/articles?key={FIREBASE_API_KEY}&pageSize=200{token_param}"
+        url = (
+            f"{FIRESTORE_URL}/articles?key={FIREBASE_API_KEY}&pageSize=200{token_param}"
+        )
         resp = req_lib.get(url, timeout=15)
         if resp.status_code != 200:
             print(f"⚠ Could not list articles: {resp.status_code}")
@@ -187,20 +227,24 @@ def find_articles_without_images() -> list[dict]:
             image_source = fields.get("image_source", {}).get("stringValue", "")
             title = fields.get("title", {}).get("stringValue", "")
             genre = fields.get("primary_genre", {}).get("stringValue", "")
-            artists = fields.get("artist_names", {}).get("arrayValue", {}).get("values", [])
+            artists = (
+                fields.get("artist_names", {}).get("arrayValue", {}).get("values", [])
+            )
             artist = artists[0].get("stringValue", "") if artists else ""
             doc_id = doc.get("name", "").split("/")[-1]
 
             # Backfill if no image or image source is "none"
             if not image_url or image_source == "none":
                 fetched_at = fields.get("fetched_at", {}).get("stringValue", "")
-                docs.append({
-                    "doc_id": doc_id,
-                    "title": title,
-                    "artist": artist,
-                    "genre": genre,
-                    "fetched_at": fetched_at,
-                })
+                docs.append(
+                    {
+                        "doc_id": doc_id,
+                        "title": title,
+                        "artist": artist,
+                        "genre": genre,
+                        "fetched_at": fetched_at,
+                    }
+                )
 
         page_token = data.get("nextPageToken", "")
         if not page_token:

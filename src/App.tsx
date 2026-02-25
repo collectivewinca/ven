@@ -8,15 +8,33 @@ const imageCache = new Map<string, string>();
 const FIRESTORE_BASE = 'https://firestore.googleapis.com/v1/projects';
 const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'miny-ven';
 
+const genrePlaceholder = (genre?: string) => {
+  const key = (genre || 'mixed').toLowerCase();
+  const palette: Record<string, [string, string]> = {
+    gospel: ['#f59e0b', '#f97316'],
+    hiphop: ['#0ea5e9', '#2563eb'],
+    pop: ['#ec4899', '#f43f5e'],
+    rock: ['#ef4444', '#7c3aed'],
+    electronic: ['#14b8a6', '#0ea5e9'],
+    mixed: ['#4b5563', '#111827'],
+  };
+  const [a, b] = palette[key] || palette.mixed;
+  const label = (genre || 'music').toUpperCase();
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='${a}'/><stop offset='100%' stop-color='${b}'/></linearGradient></defs><rect width='1600' height='900' fill='url(#g)'/><circle cx='1320' cy='160' r='220' fill='rgba(255,255,255,0.15)'/><circle cx='280' cy='760' r='280' fill='rgba(255,255,255,0.12)'/><text x='80' y='820' font-size='92' fill='rgba(255,255,255,0.85)' font-family='system-ui, -apple-system, Segoe UI, sans-serif' font-weight='700'>${label}</text></svg>`;
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+};
+
 // Lazy image component that fetches image_url on demand
-function LazyArticleImage({ articleId, imageSource, className }: {
+function LazyArticleImage({ articleId, imageSource, primaryGenre, className }: {
   articleId: string;
   imageSource?: string;
+  primaryGenre?: string;
   className?: string;
 }) {
   const [src, setSrc] = useState<string>(() => imageCache.get(articleId) || '');
   const [loading, setLoading] = useState(!imageCache.has(articleId));
-  const fallback = '/branding/minylogo.png';
+  const fallback = genrePlaceholder(primaryGenre);
+  const logoFallback = '/branding/minylogo.png';
 
   useEffect(() => {
     if (imageCache.has(articleId)) {
@@ -62,7 +80,14 @@ function LazyArticleImage({ articleId, imageSource, className }: {
       src={src}
       alt=""
       className={className}
-      onError={(e) => { (e.target as HTMLImageElement).src = fallback; }}
+      onError={(e) => {
+        const img = e.target as HTMLImageElement;
+        if (img.src !== fallback) {
+          img.src = fallback;
+          return;
+        }
+        img.src = logoFallback;
+      }}
     />
   );
 }
@@ -584,6 +609,7 @@ function App() {
                   <LazyArticleImage
                     articleId={currentArticle.id}
                     imageSource={currentArticle.imageSource}
+                    primaryGenre={currentArticle.primaryGenre}
 
                     className="h-full w-full object-cover"
                   />
@@ -643,6 +669,7 @@ function App() {
                       <LazyArticleImage
                         articleId={article.id}
                         imageSource={article.imageSource}
+                        primaryGenre={article.primaryGenre}
 
                         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                       />
@@ -795,6 +822,7 @@ function App() {
                 <LazyArticleImage
                   articleId={currentArticle.id}
                   imageSource={currentArticle.imageSource}
+                  primaryGenre={currentArticle.primaryGenre}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent" />

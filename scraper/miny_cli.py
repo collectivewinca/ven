@@ -532,7 +532,9 @@ def cmd_run(cfg: Dict[str, Any], args: argparse.Namespace) -> int:
     command = (
         f"mkdir -p {shlex.quote(log_dir)} && "
         f"cd {shlex.quote(scraper_dir)} && "
-        "python3 rss_scraper.py 2>&1 | tee -a "
+        "set -a && [ -f .env ] && . ./.env || true; set +a; "
+        "PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python; "
+        "$PY rss_scraper.py 2>&1 | tee -a "
         f"{shlex.quote(log_dir)}/rss-$(date +%Y%m%d).log"
     )
     print(f"{BOLD}Triggering scraper run...{RESET}")
@@ -789,6 +791,8 @@ def deploy_code(cfg: Dict[str, Any]) -> int:
         "--exclude",
         ".env",
         "--exclude",
+        ".venv",
+        "--exclude",
         "__pycache__",
         "--exclude",
         "artifacts",
@@ -859,7 +863,9 @@ def cmd_test(cfg: Dict[str, Any], _args: argparse.Namespace) -> int:
     scraper_dir = remote_norm(cfg["paths"]["scraper"], cfg)
     command = (
         f"cd {shlex.quote(scraper_dir)} && "
-        "python3 - <<'PY'\n"
+        "set -a && [ -f .env ] && . ./.env || true; set +a; "
+        "PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python; "
+        "$PY - <<'PY'\n"
         "import rss_scraper\n"
         "scraper = rss_scraper.RSSScraper()\n"
         "scraper.save_to_firebase = lambda article: True\n"

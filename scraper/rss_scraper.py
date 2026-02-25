@@ -18,9 +18,12 @@ from dataclasses import dataclass, asdict
 import os
 import sys
 import hashlib
+import time
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit, urljoin
 from email.utils import parsedate_to_datetime
+
+import librarium_discovery
 
 # Load environment variables
 try:
@@ -62,7 +65,9 @@ else:
 
 # Firebase Storage (optional — used to persist AI-generated images)
 _storage_bucket = None
-FIREBASE_STORAGE_BUCKET = os.getenv("FIREBASE_STORAGE_BUCKET", "miny-ven.appspot.com")
+FIREBASE_STORAGE_BUCKET = os.getenv(
+    "FIREBASE_STORAGE_BUCKET", "miny-ven.firebasestorage.app"
+)
 FIREBASE_SA_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
 if FIREBASE_SA_B64:
     try:
@@ -71,9 +76,30 @@ if FIREBASE_SA_B64:
 
         sa_info = json.loads(base64.b64decode(FIREBASE_SA_B64))
         cred = credentials.Certificate(sa_info)
-        firebase_admin.initialize_app(cred, {"storageBucket": FIREBASE_STORAGE_BUCKET})
-        _storage_bucket = storage.bucket()
-        print(f"✓ Firebase Storage initialized (bucket: {FIREBASE_STORAGE_BUCKET})")
+        app = firebase_admin.initialize_app(cred)
+        bucket_candidates = []
+        if FIREBASE_STORAGE_BUCKET:
+            bucket_candidates.append(FIREBASE_STORAGE_BUCKET)
+        for candidate in ["miny-ven.firebasestorage.app", "miny-ven.appspot.com"]:
+            if candidate not in bucket_candidates:
+                bucket_candidates.append(candidate)
+
+        for candidate in bucket_candidates:
+            try:
+                test_bucket = storage.bucket(name=candidate, app=app)
+                # Validate bucket existence up front to avoid runtime 404s.
+                if test_bucket.exists():
+                    _storage_bucket = test_bucket
+                    FIREBASE_STORAGE_BUCKET = candidate
+                    print(f"✓ Firebase Storage initialized (bucket: {candidate})")
+                    break
+            except Exception:
+                continue
+
+        if not _storage_bucket:
+            print(
+                "⚠ Firebase Storage bucket not found — using Firestore data URI fallback"
+            )
     except Exception as e:
         print(f"⚠ Firebase Storage init failed: {e}")
 
@@ -194,7 +220,9 @@ class RSSScraper:
             )
             with events_path.open("w", encoding="utf-8") as f:
                 for event in self.events:
-                    f.write(json.dumps(event, separators=(",", ":"), sort_keys=True) + "\n")
+                    f.write(
+                        json.dumps(event, separators=(",", ":"), sort_keys=True) + "\n"
+                    )
             print(f"  ✓ Wrote artifacts: {summary_path} and {events_path}")
         except Exception as e:
             print(f"  ⚠ Failed writing artifacts: {e}")
@@ -228,7 +256,9 @@ class RSSScraper:
             return items
         except Exception as e:
             print(f"  ✗ Error fetching RSS from {url}: {e}")
-            self._log_event("feed_fetch_failed", level="error", feed_url=url, error=str(e))
+            self._log_event(
+                "feed_fetch_failed", level="error", feed_url=url, error=str(e)
+            )
             return []
 
     def parse_pub_date(self, value: str) -> datetime:
@@ -277,7 +307,9 @@ class RSSScraper:
 
         return None
 
-    def _extract_image_from_article_html(self, html: str, article_url: str) -> Optional[str]:
+    def _extract_image_from_article_html(
+        self, html: str, article_url: str
+    ) -> Optional[str]:
         if not html:
             return None
 
@@ -292,7 +324,9 @@ class RSSScraper:
         for tag in meta_tags:
             attrs = dict(
                 (k.lower(), v.strip())
-                for k, v in re.findall(r"([a-zA-Z_:.-]+)\\s*=\\s*['\\\"]([^'\\\"]*)['\\\"]", tag)
+                for k, v in re.findall(
+                    r"([a-zA-Z_:.-]+)\\s*=\\s*['\\\"]([^'\\\"]*)['\\\"]", tag
+                )
             )
             prop = attrs.get("property", "").lower()
             name = attrs.get("name", "").lower()
@@ -314,7 +348,10 @@ class RSSScraper:
             if response.status_code >= 400:
                 return None
             content_type = (response.headers.get("content-type") or "").lower()
-            if "text/html" not in content_type and "application/xhtml+xml" not in content_type:
+            if (
+                "text/html" not in content_type
+                and "application/xhtml+xml" not in content_type
+            ):
                 return None
             return self._extract_image_from_article_html(response.text, article_url)
         except Exception:
@@ -335,7 +372,9 @@ class RSSScraper:
         except Exception:
             pass
         try:
-            probe = self.session.get(value, timeout=8, stream=True, allow_redirects=True)
+            probe = self.session.get(
+                value, timeout=8, stream=True, allow_redirects=True
+            )
             if probe.status_code >= 400:
                 return False
             content_type = (probe.headers.get("content-type") or "").lower()
@@ -388,9 +427,7 @@ class RSSScraper:
             max_width = 800
             if img.width > max_width:
                 ratio = max_width / img.width
-                img = img.resize(
-                    (max_width, int(img.height * ratio)), Image.LANCZOS
-                )
+                img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
             # Convert to RGB if needed (WebP doesn't support all modes)
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
@@ -403,7 +440,7 @@ class RSSScraper:
             blob.upload_from_string(webp_bytes, content_type="image/webp")
             blob.make_public()
 
-            print(f"  ✓ Uploaded image ({len(webp_bytes)//1024}KB): {storage_path}")
+            print(f"  ✓ Uploaded image ({len(webp_bytes) // 1024}KB): {storage_path}")
             self._log_event(
                 "image_uploaded",
                 storage_path=storage_path,
@@ -431,86 +468,107 @@ class RSSScraper:
         """
         if not GEMINI_API_KEY:
             return None
-        if not _storage_bucket:
-            print("  ⚠ Gemini image gen requires Firebase Storage — skipping")
-            return None
-
-        prompt = (
-            "Create a photorealistic editorial hero image for a music news card. "
-            "No text, no logo, no watermark, no collage. "
-            f"Artist focus: {artist or 'unknown artist'}. "
-            f"Genre context: {genre or 'mixed'}. "
-            f"Headline context: {title[:180]}."
-        )
 
         api_url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
             f"{GEMINI_IMAGE_MODEL}:generateContent"
         )
-        payload = json.dumps({
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseModalities": ["TEXT", "IMAGE"],
-            },
-        })
+        prompt_attempts = [
+            (
+                "Create a photorealistic editorial hero image for a music news card. "
+                "No text, no logo, no watermark, no collage. "
+                f"Artist focus: {artist or 'unknown artist'}. "
+                f"Genre context: {genre or 'mixed'}. "
+                f"Headline context: {title[:180]}."
+            ),
+            (
+                "Generate a cinematic music-magazine hero photo. "
+                "Single scene, realistic lighting, people/instruments allowed, no text overlays. "
+                f"Genre: {genre or 'mixed'}. Artist cue: {artist or 'unknown artist'}."
+            ),
+            (
+                "Create an abstract-but-photoreal music atmosphere image suitable for a news card. "
+                "No text, no logos, no brand marks, no collage. "
+                f"Theme: {genre or 'mixed'} music news."
+            ),
+        ]
 
-        try:
-            resp = self.session.post(
-                api_url,
-                data=payload,
-                headers={
-                    "x-goog-api-key": GEMINI_API_KEY,
-                    "Content-Type": "application/json",
-                },
-                timeout=60,
+        for attempt, prompt in enumerate(prompt_attempts, start=1):
+            payload = json.dumps(
+                {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {
+                        "responseModalities": ["TEXT", "IMAGE"],
+                    },
+                }
             )
-            if resp.status_code != 200:
-                print(f"  ⚠ Gemini API error: {resp.status_code} — {resp.text[:200]}")
+
+            try:
+                resp = self.session.post(
+                    api_url,
+                    data=payload,
+                    headers={
+                        "x-goog-api-key": GEMINI_API_KEY,
+                        "Content-Type": "application/json",
+                    },
+                    timeout=60,
+                )
+                if resp.status_code != 200:
+                    print(
+                        f"  ⚠ Gemini API error (attempt {attempt}): {resp.status_code} — {resp.text[:160]}"
+                    )
+                    self._log_event(
+                        "gemini_image_generation_failed",
+                        level="warning",
+                        model=GEMINI_IMAGE_MODEL,
+                        status_code=resp.status_code,
+                        attempt=attempt,
+                        error=resp.text[:300],
+                    )
+                    if "expired" in resp.text.lower() or "api key" in resp.text.lower():
+                        return None
+                    time.sleep(1.2)
+                    continue
+
+                data = resp.json()
+                parts = (
+                    data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
+                )
+
+                for part in parts:
+                    inline = part.get("inlineData") or part.get("inline_data")
+                    if not inline or not inline.get("data"):
+                        continue
+
+                    image_bytes = base64.b64decode(inline["data"])
+                    mime = inline.get("mimeType") or inline.get(
+                        "mime_type", "image/png"
+                    )
+                    print(
+                        f"  ✓ Gemini generated image ({len(image_bytes) // 1024}KB, {mime})"
+                    )
+                    return self._compress_and_upload_bytes(image_bytes, title)
+
+                print(f"  ⚠ Gemini response had no image data (attempt {attempt})")
+                self._log_event(
+                    "gemini_image_no_data",
+                    level="warning",
+                    model=GEMINI_IMAGE_MODEL,
+                    attempt=attempt,
+                )
+                time.sleep(1.2)
+            except Exception as e:
+                print(f"  ⚠ Gemini image generation failed (attempt {attempt}): {e}")
                 self._log_event(
                     "gemini_image_generation_failed",
                     level="warning",
                     model=GEMINI_IMAGE_MODEL,
-                    status_code=resp.status_code,
-                    error=resp.text[:300],
+                    attempt=attempt,
+                    error=str(e),
                 )
-                return None
+                time.sleep(1.2)
 
-            data = resp.json()
-            parts = (
-                data.get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [])
-            )
-
-            # Find the inlineData part with image bytes
-            # REST API uses camelCase (inlineData/mimeType)
-            for part in parts:
-                inline = part.get("inlineData") or part.get("inline_data")
-                if not inline or not inline.get("data"):
-                    continue
-
-                image_bytes = base64.b64decode(inline["data"])
-                mime = inline.get("mimeType") or inline.get("mime_type", "image/png")
-                print(f"  ✓ Gemini generated image ({len(image_bytes) // 1024}KB, {mime})")
-
-                # Compress to WebP and upload to Firebase Storage
-                return self._compress_and_upload_bytes(image_bytes, title)
-
-            print("  ⚠ Gemini response contained no image data")
-            self._log_event(
-                "gemini_image_no_data", level="warning", model=GEMINI_IMAGE_MODEL
-            )
-            return None
-
-        except Exception as e:
-            print(f"  ⚠ Gemini image generation failed: {e}")
-            self._log_event(
-                "gemini_image_generation_failed",
-                level="warning",
-                model=GEMINI_IMAGE_MODEL,
-                error=str(e),
-            )
-            return None
+        return None
 
     def _compress_and_upload_bytes(
         self, image_bytes: bytes, title: str
@@ -528,9 +586,7 @@ class RSSScraper:
 
             if img.width > max_width:
                 ratio = max_width / img.width
-                img = img.resize(
-                    (max_width, int(img.height * ratio)), Image.LANCZOS
-                )
+                img = img.resize((max_width, int(img.height * ratio)), Image.LANCZOS)
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
 
@@ -549,7 +605,9 @@ class RSSScraper:
                     blob.upload_from_string(webp_bytes, content_type="image/webp")
                     blob.make_public()
 
-                    print(f"  ✓ Uploaded image ({len(webp_bytes) // 1024}KB): {storage_path}")
+                    print(
+                        f"  ✓ Uploaded image ({len(webp_bytes) // 1024}KB): {storage_path}"
+                    )
                     self._log_event(
                         "image_uploaded",
                         storage_path=storage_path,
@@ -594,7 +652,9 @@ class RSSScraper:
         for strategy, candidate in candidates:
             if not candidate:
                 continue
-            normalized = self._normalize_source_url(urljoin(article_url, candidate.strip()))
+            normalized = self._normalize_source_url(
+                urljoin(article_url, candidate.strip())
+            )
             if self._is_valid_image_url(normalized):
                 return normalized, strategy
 
@@ -1028,7 +1088,12 @@ New CTA Headline:"""
         try:
             if not API_KEY:
                 print("  ✗ Failed to save: FIREBASE_API_KEY is missing")
-                self._log_event("save_failed", level="error", reason="missing_api_key", title=article.title)
+                self._log_event(
+                    "save_failed",
+                    level="error",
+                    reason="missing_api_key",
+                    title=article.title,
+                )
                 return False
 
             article_dict = asdict(article)
@@ -1052,7 +1117,9 @@ New CTA Headline:"""
                     source_url=article_dict["source_url"],
                     title=article.title,
                 )
-                print(f"  ✗ Failed to save: invalid source_url ({article_dict['source_url']})")
+                print(
+                    f"  ✗ Failed to save: invalid source_url ({article_dict['source_url']})"
+                )
                 return False
 
             # title: max 200 chars
@@ -1104,10 +1171,15 @@ New CTA Headline:"""
                 except Exception:
                     detail = response.text[:200]
                 # Backward compatibility: older deployed rules may not yet allow image_source.
-                if article_dict.get("image_source") and response.status_code in (400, 403):
+                if article_dict.get("image_source") and response.status_code in (
+                    400,
+                    403,
+                ):
                     compat_dict = dict(article_dict)
                     compat_dict.pop("image_source", None)
-                    compat_payload = {"fields": self.convert_to_firestore_fields(compat_dict)}
+                    compat_payload = {
+                        "fields": self.convert_to_firestore_fields(compat_dict)
+                    }
                     compat_resp = requests.patch(url, json=compat_payload, timeout=10)
                     if compat_resp.status_code in (200, 201):
                         print(f"  ✓ Saved (compat): {article.title[:60]}...")
@@ -1135,7 +1207,9 @@ New CTA Headline:"""
                 return False
         except Exception as e:
             print(f"  ✗ Error saving to Firebase: {e}")
-            self._log_event("save_exception", level="error", title=article.title, error=str(e))
+            self._log_event(
+                "save_exception", level="error", title=article.title, error=str(e)
+            )
             return False
 
     def process_feed(self, source_name: str, source_config: Dict) -> Tuple[int, int]:
@@ -1494,6 +1568,96 @@ New CTA Headline:"""
         return processed, len(items)
 
     # ------------------------------------------------------------------
+    # Librarium discovery (supplementary, after Exa)
+    # ------------------------------------------------------------------
+
+    def discover_librarium_articles(self) -> Tuple[int, int]:
+        """Discover fresh music news via librarium multi-provider search.
+        Runs after Exa as a supplementary source."""
+        if not librarium_discovery.is_available():
+            print("\n⚠ librarium CLI not available, skipping")
+            return 0, 0
+
+        print("\n🔎 Discovering articles via librarium (supplementary)...")
+        items = librarium_discovery.discover()
+
+        if not items:
+            print("  librarium returned no results")
+            return 0, 0
+
+        print(f"  Found {len(items)} librarium results")
+
+        processed = 0
+        duplicates = 0
+        errors = 0
+
+        for item in items:
+            try:
+                original_title = item["title"]
+                content = item["content"] or item["description"]
+
+                if self.check_duplicate(original_title, item["link"]):
+                    duplicates += 1
+                    continue
+
+                artists = self.extract_artists(original_title, content)
+                main_artist = artists[0] if artists else ""
+
+                print(f"  📝 Generating CTA headline...")
+                cta_title = self.generate_cta_headline(
+                    original_title, content, main_artist
+                )
+
+                summary = self.summarize_with_deepseek(cta_title, content)
+
+                primary_genre, secondary_genres = self.classify_genre(
+                    original_title, content, "mixed"
+                )
+
+                pub_date = self.parse_pub_date(item.get("pub_date", ""))
+                image_url, image_source = self.resolve_article_image(
+                    item,
+                    title=cta_title,
+                    artist_names=artists,
+                    primary_genre=primary_genre,
+                )
+
+                article = Article(
+                    id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
+                    title=cta_title,
+                    summary=summary,
+                    full_content=content[:2000],
+                    source="Librarium Discovery",
+                    source_url=self._normalize_source_url(item["link"]),
+                    primary_genre=primary_genre,
+                    secondary_genres=secondary_genres,
+                    artist_names=artists,
+                    image_url=image_url,
+                    published_at=pub_date,
+                    read_time=60,
+                    share_count=0,
+                    email_count=0,
+                    bookmark_count=0,
+                    view_count=0,
+                    fetched_at=datetime.now(),
+                    image_source=image_source,
+                )
+
+                if self.save_to_firebase(article):
+                    processed += 1
+
+            except Exception as e:
+                errors += 1
+                print(f"  ✗ Error processing librarium item: {e}")
+                continue
+
+        print(
+            f"  [librarium_discovery] items={len(items)} "
+            f"saved={processed} duplicates={duplicates} errors={errors}"
+        )
+        return processed, len(items)
+
+    # ------------------------------------------------------------------
     # Archive stale articles
     # ------------------------------------------------------------------
 
@@ -1504,8 +1668,12 @@ New CTA Headline:"""
         if not API_KEY:
             return 0
 
-        cutoff = datetime.utcnow() - __import__("datetime").timedelta(hours=self.ARCHIVE_HOURS)
-        print(f"\n🗄  Archiving articles older than {self.ARCHIVE_HOURS}h (before {cutoff.isoformat()}Z)...")
+        cutoff = datetime.utcnow() - __import__("datetime").timedelta(
+            hours=self.ARCHIVE_HOURS
+        )
+        print(
+            f"\n🗄  Archiving articles older than {self.ARCHIVE_HOURS}h (before {cutoff.isoformat()}Z)..."
+        )
 
         page_token = ""
         archived = 0
@@ -1514,10 +1682,14 @@ New CTA Headline:"""
         while True:
             try:
                 token_param = f"&pageToken={page_token}" if page_token else ""
-                url = f"{FIRESTORE_URL}/articles?key={API_KEY}&pageSize=200{token_param}"
+                url = (
+                    f"{FIRESTORE_URL}/articles?key={API_KEY}&pageSize=200{token_param}"
+                )
                 response = self.session.get(url, timeout=15)
                 if response.status_code != 200:
-                    print(f"  ⚠ Could not list articles for archiving: {response.status_code}")
+                    print(
+                        f"  ⚠ Could not list articles for archiving: {response.status_code}"
+                    )
                     break
 
                 data = response.json()
@@ -1531,10 +1703,9 @@ New CTA Headline:"""
                     doc_id = doc_path.split("/")[-1]
 
                     # Determine age from fetched_at or published_at
-                    ts_str = (
-                        fields.get("fetched_at", {}).get("stringValue", "")
-                        or fields.get("published_at", {}).get("stringValue", "")
-                    )
+                    ts_str = fields.get("fetched_at", {}).get(
+                        "stringValue", ""
+                    ) or fields.get("published_at", {}).get("stringValue", "")
                     if not ts_str:
                         continue
 
@@ -1552,10 +1723,14 @@ New CTA Headline:"""
                         fields["image_source"] = {"stringValue": "unknown"}
 
                     # Copy to articles_archive
-                    archive_url = f"{FIRESTORE_URL}/articles_archive/{doc_id}?key={API_KEY}"
+                    archive_url = (
+                        f"{FIRESTORE_URL}/articles_archive/{doc_id}?key={API_KEY}"
+                    )
                     archive_payload = {"fields": fields}
                     try:
-                        resp = requests.patch(archive_url, json=archive_payload, timeout=10)
+                        resp = requests.patch(
+                            archive_url, json=archive_payload, timeout=10
+                        )
                         if resp.status_code not in (200, 201):
                             errors += 1
                             continue
@@ -1608,6 +1783,14 @@ New CTA Headline:"""
             )
             print()
 
+        if librarium_discovery.is_available():
+            print("✓ Librarium CLI available for supplementary discovery")
+        else:
+            print(
+                "⚠️  Warning: Librarium CLI not installed. Supplementary discovery disabled."
+            )
+        print()
+
         total_processed = 0
         total_fetched_items = 0
         source_stats: Dict[str, Dict[str, int]] = {}
@@ -1626,7 +1809,9 @@ New CTA Headline:"""
                 }
             except Exception as e:
                 print(f"  ✗ Error with {source_name}: {e}")
-                self._log_event("source_failed", level="error", source=source_name, error=str(e))
+                self._log_event(
+                    "source_failed", level="error", source=source_name, error=str(e)
+                )
                 continue
 
         # 2. Exa news discovery
@@ -1640,9 +1825,29 @@ New CTA Headline:"""
             }
         except Exception as e:
             print(f"  ✗ Error with Exa discovery: {e}")
-            self._log_event("source_failed", level="error", source="exa_discovery", error=str(e))
+            self._log_event(
+                "source_failed", level="error", source="exa_discovery", error=str(e)
+            )
 
-        # 3. Archive stale articles
+        # 3. Librarium supplementary discovery
+        try:
+            lib_processed, lib_items = self.discover_librarium_articles()
+            total_processed += lib_processed
+            total_fetched_items += lib_items
+            source_stats["librarium_discovery"] = {
+                "saved": lib_processed,
+                "items_found": lib_items,
+            }
+        except Exception as e:
+            print(f"  ✗ Error with librarium discovery: {e}")
+            self._log_event(
+                "source_failed",
+                level="error",
+                source="librarium_discovery",
+                error=str(e),
+            )
+
+        # 4. Archive stale articles
         try:
             archived_count = self.archive_stale_articles()
             source_stats["archive"] = {"archived": archived_count}
