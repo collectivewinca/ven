@@ -16,6 +16,7 @@ const genrePlaceholder = (genre?: string) => {
     pop: ['#ec4899', '#f43f5e'],
     rock: ['#ef4444', '#7c3aed'],
     electronic: ['#14b8a6', '#0ea5e9'],
+    tech: ['#10b981', '#0f766e'],
     mixed: ['#4b5563', '#111827'],
   };
   const [a, b] = palette[key] || palette.mixed;
@@ -309,6 +310,7 @@ function App() {
     { id: 'pop', label: 'Pop', gradient: 'from-pink-500 to-rose-500' },
     { id: 'rock', label: 'Rock', gradient: 'from-red-600 to-orange-600' },
     { id: 'electronic', label: 'Electronic', gradient: 'from-cyan-600 to-blue-600' },
+    { id: 'tech', label: 'Tech', gradient: 'from-emerald-600 to-teal-600' },
   ];
 
   const filteredArticles = selectedGenre === 'all' 

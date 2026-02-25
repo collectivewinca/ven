@@ -24,6 +24,7 @@ from urllib.parse import urlsplit, urlunsplit, urljoin
 from email.utils import parsedate_to_datetime
 
 import librarium_discovery
+import hackerfeeds_discovery
 
 # Load environment variables
 try:
@@ -162,6 +163,18 @@ GENRE_KEYWORDS = {
         "trance",
         "ambient",
     ],
+    "tech": [
+        "tech",
+        "technology",
+        "ai",
+        "software",
+        "startup",
+        "developer",
+        "open source",
+        "github",
+        "hacker",
+        "programming",
+    ],
 }
 
 
@@ -197,6 +210,8 @@ class RSSScraper:
         self.artifact_dir = Path(
             os.getenv("SCRAPER_ARTIFACT_DIR", Path(__file__).parent / "artifacts")
         )
+        self.perplexity_disabled = False
+        self.storage_upload_disabled = False
 
     def _log_event(self, event: str, level: str = "info", **data: object) -> None:
         self.events.append(
@@ -595,7 +610,7 @@ class RSSScraper:
             webp_bytes = buf.getvalue()
 
             # Attempt Firebase Storage upload
-            if _storage_bucket:
+            if _storage_bucket and not self.storage_upload_disabled:
                 try:
                     slug = re.sub(r"[^a-z0-9]+", "-", title.lower())[:40].strip("-")
                     digest = hashlib.sha1(image_bytes[:256]).hexdigest()[:12]
@@ -615,7 +630,10 @@ class RSSScraper:
                     )
                     return blob.public_url
                 except Exception as e:
-                    print(f"  ⚠ Storage upload failed, using data URI: {e}")
+                    err = self._trim_error(e)
+                    if any(x in err.lower() for x in ["billing", "403", "permission"]):
+                        self.storage_upload_disabled = True
+                    print(f"  ⚠ Storage upload failed, using data URI: {err}")
 
             # Fallback: return data URI (works directly in <img> tags)
             b64 = base64.b64encode(webp_bytes).decode()
@@ -762,6 +780,42 @@ Summary (60 words max):"""
         return bool(cls._REFUSAL_PATTERNS.search(text))
 
     @staticmethod
+    def _trim_error(exc: Exception, limit: int = 180) -> str:
+        text = str(exc).replace("\n", " ").replace("\r", " ")
+        text = re.sub(r"\s+", " ", text).strip()
+        return text[:limit]
+
+    @staticmethod
+    def _is_perplexity_auth_or_quota_error(exc: Exception) -> bool:
+        text = str(exc).lower()
+        needles = [
+            "401",
+            "403",
+            "authorization",
+            "unauthorized",
+            "forbidden",
+            "quota",
+            "credit",
+            "insufficient",
+            "billing",
+        ]
+        return any(n in text for n in needles)
+
+    def _disable_perplexity_if_needed(self, exc: Exception, context: str) -> None:
+        if self.perplexity_disabled:
+            return
+        if self._is_perplexity_auth_or_quota_error(exc):
+            self.perplexity_disabled = True
+            msg = self._trim_error(exc)
+            print(f"  ⚠ Perplexity disabled for this run ({context}): {msg}")
+            self._log_event(
+                "perplexity_disabled",
+                level="warning",
+                context=context,
+                error=msg,
+            )
+
+    @staticmethod
     def _clean_perplexity_text(text: str) -> str:
         """Strip markdown bold, citation brackets, and stray whitespace."""
         text = text.strip()
@@ -800,7 +854,7 @@ Summary (60 words max):"""
 
     def _research_with_perplexity_fallback(self, artist: str, topic: str) -> str:
         """Fallback: research using Perplexity SDK if Exa is unavailable."""
-        if not _perplexity_client:
+        if not _perplexity_client or self.perplexity_disabled:
             return ""
 
         prompt = (
@@ -829,14 +883,15 @@ Summary (60 words max):"""
             research = result.choices[0].message.content.strip()
             return self._clean_perplexity_text(research)
         except Exception as e:
-            print(f"  ⚠ Perplexity research error: {e}")
+            self._disable_perplexity_if_needed(e, "research")
+            print(f"  ⚠ Perplexity research error: {self._trim_error(e)}")
             return ""
 
     def generate_cta_headline(
         self, original_title: str, content: str, artist: str
     ) -> str:
         """Generate high-converting CTA headline using Perplexity SDK"""
-        if not _perplexity_client:
+        if not _perplexity_client or self.perplexity_disabled:
             return self._transform_title_fallback(original_title)
 
         prompt = f"""Create an engaging, click-worthy headline for this music news story.
@@ -894,7 +949,8 @@ New CTA Headline:"""
 
             return headline
         except Exception as e:
-            print(f"  ⚠ CTA headline error: {e}, using fallback")
+            self._disable_perplexity_if_needed(e, "cta_headline")
+            print(f"  ⚠ CTA headline error: {self._trim_error(e)}, using fallback")
             return self._transform_title_fallback(original_title)
 
     def _transform_title_fallback(self, original_title: str) -> str:
@@ -935,6 +991,8 @@ New CTA Headline:"""
 
         if source_genre == "gospel":
             return "gospel", []
+        if source_genre == "tech":
+            return "tech", []
 
         scores = {}
         for genre, keywords in GENRE_KEYWORDS.items():
@@ -1331,7 +1389,7 @@ New CTA Headline:"""
 
     def _discover_perplexity_fallback(self) -> Tuple[int, int]:
         """Fallback discovery using Perplexity when Exa is unavailable."""
-        if not _perplexity_client:
+        if not _perplexity_client or self.perplexity_disabled:
             print("  ⚠ Neither Exa nor Perplexity available for discovery.")
             return 0, 0
 
@@ -1382,7 +1440,12 @@ New CTA Headline:"""
                             }
                         )
             except Exception as e:
-                print(f"  ⚠ Perplexity discovery error ({query[:30]}...): {e}")
+                self._disable_perplexity_if_needed(e, "discovery")
+                print(
+                    f"  ⚠ Perplexity discovery error ({query[:30]}...): {self._trim_error(e)}"
+                )
+                if self.perplexity_disabled:
+                    break
 
         print(f"  Found {len(items)} Perplexity discovery results")
 
@@ -1658,6 +1721,101 @@ New CTA Headline:"""
         return processed, len(items)
 
     # ------------------------------------------------------------------
+    # hacker-feeds discovery (supplementary, after librarium)
+    # ------------------------------------------------------------------
+
+    def discover_hackerfeeds_articles(self) -> Tuple[int, int]:
+        """Discover additional candidate links from hacker-feeds CLI."""
+        if not hackerfeeds_discovery.is_available():
+            print("\n⚠ hf CLI not available, skipping hackerfeeds discovery")
+            return 0, 0
+
+        print("\n🔎 Discovering articles via hacker-feeds (supplementary)...")
+        items = hackerfeeds_discovery.discover()
+
+        if not items:
+            print("  hacker-feeds returned no results")
+            return 0, 0
+
+        print(f"  Found {len(items)} hacker-feeds results")
+
+        processed = 0
+        duplicates = 0
+        errors = 0
+
+        for item in items:
+            try:
+                original_title = item["title"]
+                content = (
+                    item.get("content") or item.get("description") or original_title
+                )
+
+                if self.check_duplicate(original_title, item["link"]):
+                    duplicates += 1
+                    continue
+
+                artists = self.extract_artists(original_title, content)
+                main_artist = artists[0] if artists else ""
+
+                print("  📝 Generating CTA headline...")
+                cta_title = self.generate_cta_headline(
+                    original_title, content, main_artist
+                )
+                summary = self.summarize_with_deepseek(cta_title, content)
+
+                primary_genre, secondary_genres = self.classify_genre(
+                    original_title, content, "mixed"
+                )
+
+                pub_date = self.parse_pub_date(item.get("pub_date", ""))
+                image_url, image_source = self.resolve_article_image(
+                    item,
+                    title=cta_title,
+                    artist_names=artists,
+                    primary_genre=primary_genre,
+                )
+
+                source_label = "HackerFeeds Discovery"
+                source_hint = str(item.get("source_hint", "")).strip()
+                if source_hint:
+                    source_label = f"HackerFeeds ({source_hint})"
+
+                article = Article(
+                    id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
+                    title=cta_title,
+                    summary=summary,
+                    full_content=content[:2000],
+                    source=source_label,
+                    source_url=self._normalize_source_url(item["link"]),
+                    primary_genre=primary_genre,
+                    secondary_genres=secondary_genres,
+                    artist_names=artists,
+                    image_url=image_url,
+                    published_at=pub_date,
+                    read_time=60,
+                    share_count=0,
+                    email_count=0,
+                    bookmark_count=0,
+                    view_count=0,
+                    fetched_at=datetime.now(),
+                    image_source=image_source,
+                )
+
+                if self.save_to_firebase(article):
+                    processed += 1
+
+            except Exception as e:
+                errors += 1
+                print(f"  ✗ Error processing hacker-feeds item: {e}")
+                continue
+
+        print(
+            f"  [hackerfeeds_discovery] items={len(items)} "
+            f"saved={processed} duplicates={duplicates} errors={errors}"
+        )
+        return processed, len(items)
+
+    # ------------------------------------------------------------------
     # Archive stale articles
     # ------------------------------------------------------------------
 
@@ -1789,6 +1947,11 @@ New CTA Headline:"""
             print(
                 "⚠️  Warning: Librarium CLI not installed. Supplementary discovery disabled."
             )
+
+        if hackerfeeds_discovery.is_available():
+            print("✓ hacker-feeds CLI available for supplementary discovery")
+        else:
+            print("⚠️  Warning: hf CLI not installed. hacker-feeds discovery disabled.")
         print()
 
         total_processed = 0
@@ -1848,6 +2011,24 @@ New CTA Headline:"""
             )
 
         # 4. Archive stale articles
+        try:
+            hf_processed, hf_items = self.discover_hackerfeeds_articles()
+            total_processed += hf_processed
+            total_fetched_items += hf_items
+            source_stats["hackerfeeds_discovery"] = {
+                "saved": hf_processed,
+                "items_found": hf_items,
+            }
+        except Exception as e:
+            print(f"  ✗ Error with hacker-feeds discovery: {e}")
+            self._log_event(
+                "source_failed",
+                level="error",
+                source="hackerfeeds_discovery",
+                error=str(e),
+            )
+
+        # 5. Archive stale articles
         try:
             archived_count = self.archive_stale_articles()
             source_stats["archive"] = {"archived": archived_count}

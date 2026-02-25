@@ -5,7 +5,7 @@ export interface MusicNewsArticle {
   fullContent?: string;
   source: string;
   sourceUrl: string;
-  primaryGenre: 'gospel' | 'hiphop' | 'pop' | 'rock' | 'electronic';
+  primaryGenre: 'gospel' | 'hiphop' | 'pop' | 'rock' | 'electronic' | 'tech';
   secondaryGenres: string[];
   artistNames: string[];
   imageUrl?: string;
@@ -19,7 +19,7 @@ export interface MusicNewsArticle {
   isBookmarked?: boolean;
 }
 
-export type Genre = 'gospel' | 'hiphop' | 'pop' | 'rock' | 'electronic' | 'all';
+export type Genre = 'gospel' | 'hiphop' | 'pop' | 'rock' | 'electronic' | 'tech' | 'all';
 
 export interface AnalyticsEvent {
   articleId: string;

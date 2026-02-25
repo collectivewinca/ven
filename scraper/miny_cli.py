@@ -532,6 +532,7 @@ def cmd_run(cfg: Dict[str, Any], args: argparse.Namespace) -> int:
     command = (
         f"mkdir -p {shlex.quote(log_dir)} && "
         f"cd {shlex.quote(scraper_dir)} && "
+        "export PATH=/home/exedev/bin:/home/exedev/.npm-global/bin:$PATH; "
         "set -a && [ -f .env ] && . ./.env || true; set +a; "
         "PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python; "
         "$PY rss_scraper.py 2>&1 | tee -a "
@@ -863,6 +864,7 @@ def cmd_test(cfg: Dict[str, Any], _args: argparse.Namespace) -> int:
     scraper_dir = remote_norm(cfg["paths"]["scraper"], cfg)
     command = (
         f"cd {shlex.quote(scraper_dir)} && "
+        "export PATH=/home/exedev/bin:/home/exedev/.npm-global/bin:$PATH; "
         "set -a && [ -f .env ] && . ./.env || true; set +a; "
         "PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python; "
         "$PY - <<'PY'\n"
