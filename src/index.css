@@ -17,8 +17,8 @@ html {
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background: #000000;
-  color: #ffffff;
+  background: #f8fafc;
+  color: #0f172a;
   line-height: 1.5;
   letter-spacing: 0.01em;
   overflow: hidden;
@@ -34,14 +34,14 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.15);
   border-radius: 4px;
 }
 
 /* Selection */
 ::selection {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: rgba(99, 102, 241, 0.2);
+  color: #0f172a;
 }
 
 /* Smooth Transitions */
@@ -51,32 +51,24 @@ body {
 
 /* Glass Effect */
 .glass {
-  background: rgba(0, 0, 0, 0.7);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
 }
 
 .glass-light {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
-}
-
-/* Gradient Text */
-.gradient-text {
-  background: linear-gradient(135deg, #fff 0%, rgba(255,255,255,0.7) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
 }
 
 /* Image Loading Skeleton */
 .skeleton {
   background: linear-gradient(
     90deg,
-    rgba(255, 255, 255, 0.03) 0%,
-    rgba(255, 255, 255, 0.08) 50%,
-    rgba(255, 255, 255, 0.03) 100%
+    rgba(0, 0, 0, 0.04) 0%,
+    rgba(0, 0, 0, 0.08) 50%,
+    rgba(0, 0, 0, 0.04) 100%
   );
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
@@ -95,7 +87,7 @@ body {
 
 .card-hover:hover {
   transform: translateY(-2px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
 }
 
 /* Button Press Effect */
@@ -208,7 +200,7 @@ body {
 /* Focus Styles for Accessibility */
 button:focus-visible,
 a:focus-visible {
-  outline: 2px solid rgba(255, 255, 255, 0.5);
+  outline: 2px solid rgba(99, 102, 241, 0.5);
   outline-offset: 2px;
 }
 
@@ -330,9 +322,9 @@ a:focus-visible {
   align-items: center;
   justify-content: center;
   background:
-    radial-gradient(90rem 42rem at 15% 18%, rgba(110, 231, 183, 0.14), transparent 60%),
-    radial-gradient(80rem 38rem at 85% 82%, rgba(125, 211, 252, 0.14), transparent 60%),
-    linear-gradient(145deg, #040404 0%, #111 45%, #060606 100%);
+    radial-gradient(90rem 42rem at 15% 18%, rgba(99, 102, 241, 0.06), transparent 60%),
+    radial-gradient(80rem 38rem at 85% 82%, rgba(14, 165, 233, 0.06), transparent 60%),
+    linear-gradient(145deg, #f1f5f9 0%, #e2e8f0 45%, #f1f5f9 100%);
 }
 
 .desktop-shell-toggle {
@@ -345,9 +337,9 @@ a:focus-visible {
   gap: 0.45rem;
   padding: 0.5rem 0.8rem;
   border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.58);
-  color: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255, 255, 255, 0.85);
+  color: rgba(0, 0, 0, 0.7);
   font-size: 0.75rem;
   letter-spacing: 0.01em;
   backdrop-filter: blur(12px);
@@ -364,7 +356,7 @@ a:focus-visible {
     linear-gradient(160deg, #5a5a5a 0%, #2d2d2d 20%, #161616 52%, #3f3f3f 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
-    0 58px 110px rgba(0, 0, 0, 0.62),
+    0 58px 110px rgba(0, 0, 0, 0.25),
     0 10px 28px rgba(255, 255, 255, 0.14) inset,
     0 -12px 26px rgba(0, 0, 0, 0.48) inset;
 }
@@ -394,7 +386,7 @@ a:focus-visible {
   height: 100%;
   border-radius: 44px;
   overflow: hidden;
-  background: #000;
+  background: #f8fafc;
 }
 
 .iphone-dynamic-island {
