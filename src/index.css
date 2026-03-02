@@ -327,24 +327,6 @@ a:focus-visible {
     linear-gradient(145deg, #f1f5f9 0%, #e2e8f0 45%, #f1f5f9 100%);
 }
 
-.desktop-shell-toggle {
-  position: fixed;
-  top: 1rem;
-  right: 1rem;
-  z-index: 80;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.5rem 0.8rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(0, 0, 0, 0.1);
-  background: rgba(255, 255, 255, 0.85);
-  color: rgba(0, 0, 0, 0.7);
-  font-size: 0.75rem;
-  letter-spacing: 0.01em;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
 
 .iphone-shell-frame {
   position: relative;

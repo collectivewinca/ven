@@ -267,14 +267,14 @@ function App() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <button
                   onClick={() => fetchArticles(selectedGenre)}
-                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 hover:border-slate-300"
+                  className="rounded-full border border-slate-200 bg-white p-2.5 transition hover:bg-slate-50 hover:border-slate-300"
                   disabled={loading}
+                  aria-label="Refresh articles"
                 >
-                  <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                  Refresh
+                  <RefreshCw className={`h-4 w-4 text-slate-500 ${loading ? 'animate-spin' : ''}`} />
                 </button>
                 <button
                   onClick={() => setShowBookmarks(true)}
@@ -287,6 +287,17 @@ function App() {
                       {bookmarks.length}
                     </span>
                   )}
+                </button>
+                <button
+                  onClick={() => setUseDesktopShell(prev => !prev)}
+                  className={`rounded-full border p-2.5 transition ${
+                    useDesktopShell
+                      ? 'border-indigo-300 bg-indigo-50 text-indigo-600'
+                      : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                  }`}
+                  aria-label={useDesktopShell ? 'Exit phone preview' : 'Phone preview'}
+                >
+                  <Smartphone className="h-4 w-4" />
                 </button>
               </div>
             </div>
@@ -320,8 +331,8 @@ function App() {
                 No articles available
               </div>
             ) : (
-              <article className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-lg">
-                <div className="relative aspect-[16/9]">
+              <article className="overflow-hidden rounded-2xl lg:rounded-3xl border border-slate-200 bg-white shadow-lg">
+                <div className="relative aspect-[4/3] sm:aspect-[3/2] lg:aspect-[16/9] xl:aspect-[16/9]">
                   <LazyArticleImage
                     articleId={currentArticle.id}
                     imageSource={currentArticle.imageSource}
@@ -329,28 +340,28 @@ function App() {
                     className="h-full w-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-                  <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between">
-                    <span className={`rounded-full bg-gradient-to-r px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white ${
+                  <div className="absolute bottom-3 left-3 right-3 sm:bottom-4 sm:left-4 sm:right-4 flex items-center justify-between">
+                    <span className={`rounded-full bg-gradient-to-r px-2.5 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-white ${
                       genres.find(g => g.id === currentArticle.primaryGenre)?.gradient || 'from-gray-600 to-gray-500'
                     }`}>
                       {currentArticle.primaryGenre}
                     </span>
-                    <span className="rounded-full bg-black/40 px-3 py-1 text-[11px] text-white/90 backdrop-blur-sm">{currentArticle.source}</span>
+                    <span className="rounded-full bg-black/40 px-2.5 py-0.5 sm:px-3 sm:py-1 text-[10px] sm:text-[11px] text-white/90 backdrop-blur-sm">{currentArticle.source}</span>
                   </div>
                 </div>
-                <div className="space-y-3 p-6">
-                  <h2 className="text-2xl font-extrabold leading-tight tracking-tight text-slate-900">{currentArticle.title}</h2>
-                  <p className="max-w-[68ch] leading-relaxed text-slate-600">{currentArticle.summary}</p>
-                  <div className="flex items-center justify-between pt-2 text-sm text-slate-500">
+                <div className="space-y-2 sm:space-y-3 p-4 sm:p-5 lg:p-6">
+                  <h2 className="text-lg sm:text-xl lg:text-2xl font-extrabold leading-tight tracking-tight text-slate-900">{currentArticle.title}</h2>
+                  <p className="text-sm sm:text-base max-w-[68ch] leading-relaxed text-slate-600">{currentArticle.summary}</p>
+                  <div className="flex items-center justify-between pt-1 sm:pt-2 text-xs sm:text-sm text-slate-500">
                     <span>{new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     <a
                       href={currentArticle.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-3 py-1.5 text-slate-600 transition hover:bg-slate-50"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full border border-slate-200 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm text-slate-600 transition hover:bg-slate-50"
                       onClick={() => trackEvent('external_link', currentArticle.id)}
                     >
-                      Open Source <ExternalLink className="h-3.5 w-3.5" />
+                      Source <ExternalLink className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                     </a>
                   </div>
                 </div>
@@ -898,17 +909,6 @@ function App() {
 
   return (
     <div className={showDesktopShell ? 'desktop-shell-scene' : ''}>
-      {isDesktopViewport && (
-        <button
-          onClick={() => setUseDesktopShell(prev => !prev)}
-          className="desktop-shell-toggle"
-          type="button"
-        >
-          <Smartphone className="w-4 h-4" />
-          {showDesktopShell ? 'Shell on' : 'Shell off'}
-        </button>
-      )}
-
       {isDesktopGalleryMode ? (
         desktopGalleryContent
       ) : (
