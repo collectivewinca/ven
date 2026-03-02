@@ -1,163 +1,24 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import type { MusicNewsArticle, Genre } from './types/news';
+import type { Genre } from './types/news';
 import { Bookmark, Share2, Mail, Heart, Music, X, ChevronUp, ChevronDown, ExternalLink, RefreshCw, Smartphone, MessageSquare, Send, Menu } from 'lucide-react';
+import { LazyArticleImage } from './components/LazyArticleImage';
+import { ArticleSkeleton } from './components/ArticleSkeleton';
+import { Toast } from './components/Toast';
+import { PullToRefresh } from './components/PullToRefresh';
+import { useArticles } from './hooks/useArticles';
 
-// Image cache: docId -> image URL (persists across re-renders)
-const imageCache = new Map<string, string>();
-
-const FIRESTORE_BASE = 'https://firestore.googleapis.com/v1/projects';
-const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'miny-ven';
-
-const genrePlaceholder = (genre?: string) => {
-  const key = (genre || 'mixed').toLowerCase();
-  const palette: Record<string, [string, string]> = {
-    gospel: ['#f59e0b', '#f97316'],
-    hiphop: ['#0ea5e9', '#2563eb'],
-    pop: ['#ec4899', '#f43f5e'],
-    rock: ['#ef4444', '#7c3aed'],
-    electronic: ['#14b8a6', '#0ea5e9'],
-    tech: ['#10b981', '#0f766e'],
-    mixed: ['#4b5563', '#111827'],
-  };
-  const [a, b] = palette[key] || palette.mixed;
-  const label = (genre || 'music').toUpperCase();
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0%' stop-color='${a}'/><stop offset='100%' stop-color='${b}'/></linearGradient></defs><rect width='1600' height='900' fill='url(#g)'/><circle cx='1320' cy='160' r='220' fill='rgba(255,255,255,0.15)'/><circle cx='280' cy='760' r='280' fill='rgba(255,255,255,0.12)'/><text x='80' y='820' font-size='92' fill='rgba(255,255,255,0.85)' font-family='system-ui, -apple-system, Segoe UI, sans-serif' font-weight='700'>${label}</text></svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-};
-
-// Lazy image component that fetches image_url on demand
-function LazyArticleImage({ articleId, imageSource, primaryGenre, className }: {
-  articleId: string;
-  imageSource?: string;
-  primaryGenre?: string;
-  className?: string;
-}) {
-  const [src, setSrc] = useState<string>(() => imageCache.get(articleId) || '');
-  const [loading, setLoading] = useState(!imageCache.has(articleId));
-  const fallback = genrePlaceholder(primaryGenre);
-  const logoFallback = '/branding/minylogo.png';
-
-  useEffect(() => {
-    if (imageCache.has(articleId)) {
-      setSrc(imageCache.get(articleId)!);
-      setLoading(false);
-      return;
-    }
-    // Skip fetch if we know there's no image
-    if (!imageSource || imageSource === 'none') {
-      setSrc(fallback);
-      setLoading(false);
-      imageCache.set(articleId, fallback);
-      return;
-    }
-    let cancelled = false;
-    const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-    const params = new URLSearchParams();
-    if (apiKey) params.set('key', apiKey);
-    params.append('mask.fieldPaths', 'image_url');
-    const url = `${FIRESTORE_BASE}/${PROJECT_ID}/databases/(default)/documents/articles/${articleId}?${params}`;
-    fetch(url).then(r => r.json()).then(doc => {
-      if (cancelled) return;
-      const raw = doc?.fields?.image_url?.stringValue?.trim() || '';
-      const resolved = (raw && !raw.includes('images.unsplash.com')) ? raw : fallback;
-      imageCache.set(articleId, resolved);
-      setSrc(resolved);
-      setLoading(false);
-    }).catch(() => {
-      if (!cancelled) {
-        setSrc(fallback);
-        setLoading(false);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [articleId, imageSource]);
-
-  if (loading) {
-    return <div className={`${className} bg-white/5 animate-pulse`} />;
-  }
-
-  return (
-    <img
-      src={src}
-      alt=""
-      className={className}
-      onError={(e) => {
-        const img = e.target as HTMLImageElement;
-        if (img.src !== fallback) {
-          img.src = fallback;
-          return;
-        }
-        img.src = logoFallback;
-      }}
-    />
-  );
-}
-
-// Loading skeleton component
-const ArticleSkeleton = () => (
-  <div className="h-full flex flex-col p-4 sm:p-6 animate-pulse">
-    <div className="w-20 h-6 bg-white/10 rounded-full mb-4" />
-    <div className="relative aspect-[4/3] mb-4 rounded-2xl bg-white/5 overflow-hidden">
-      <div className="absolute inset-0 skeleton" />
-    </div>
-    <div className="space-y-3 mb-4">
-      <div className="h-7 bg-white/10 rounded-lg w-3/4" />
-      <div className="h-7 bg-white/10 rounded-lg w-1/2" />
-    </div>
-    <div className="space-y-2 flex-1">
-      <div className="h-4 bg-white/5 rounded w-full" />
-      <div className="h-4 bg-white/5 rounded w-full" />
-      <div className="h-4 bg-white/5 rounded w-5/6" />
-      <div className="h-4 bg-white/5 rounded w-4/5" />
-    </div>
-  </div>
-);
-
-// Toast notification component
-const Toast = ({ message, onClose }: { message: string; onClose: () => void }) => {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 2000);
-    return () => clearTimeout(timer);
-  }, [onClose]);
-
-  return (
-    <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-slide-in-up px-4">
-      <div className="glass-light px-5 py-3 rounded-full text-sm font-medium text-white shadow-2xl whitespace-nowrap">
-        {message}
-      </div>
-    </div>
-  );
-};
-
-// Pull to refresh indicator
-const PullToRefresh = ({ pullDistance, isPulling }: { pullDistance: number; isPulling: boolean }) => {
-  if (!isPulling || pullDistance < 20) return null;
-  
-  const opacity = Math.min(pullDistance / 80, 1);
-  const rotation = Math.min((pullDistance / 100) * 360, 360);
-  
-  return (
-    <div 
-      className="absolute top-0 left-0 right-0 flex justify-center items-center z-20 pointer-events-none"
-      style={{ 
-        opacity,
-        transform: `translateY(${Math.min(pullDistance * 0.5, 60)}px)`,
-        paddingTop: 'env(safe-area-inset-top)'
-      }}
-    >
-      <div 
-        className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"
-        style={{ transform: `rotate(${rotation}deg)` }}
-      >
-        <RefreshCw className="w-5 h-5 text-white" />
-      </div>
-    </div>
-  );
-};
+const genres: { id: Genre; label: string; gradient: string }[] = [
+  { id: 'all', label: 'All', gradient: 'from-gray-600 to-gray-500' },
+  { id: 'gospel', label: 'Gospel', gradient: 'from-orange-500 to-amber-500' },
+  { id: 'hiphop', label: 'Hip-Hop', gradient: 'from-violet-600 to-indigo-600' },
+  { id: 'pop', label: 'Pop', gradient: 'from-pink-500 to-rose-500' },
+  { id: 'rock', label: 'Rock', gradient: 'from-red-600 to-orange-600' },
+  { id: 'electronic', label: 'Electronic', gradient: 'from-cyan-600 to-blue-600' },
+  { id: 'tech', label: 'Tech', gradient: 'from-emerald-600 to-teal-600' },
+];
 
 function App() {
-  const [articles, setArticles] = useState<MusicNewsArticle[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { articles, loading, error, fetchArticles } = useArticles();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedGenre, setSelectedGenre] = useState<Genre>('all');
   const [bookmarks, setBookmarks] = useState<string[]>(() => {
@@ -187,137 +48,19 @@ function App() {
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Fetch articles from Firebase using REST API
-  const fetchArticles = useCallback(async (genre: Genre = 'all') => {
-    setLoading(true);
-    setArticles([]);
-    
-    try {
-      // Use REST API directly to avoid Firestore client issues
-      const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'miny-ven';
-      const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-      console.log('Fetching articles from REST API...');
+  // Articles are already filtered by genre in the hook — use directly
+  const currentArticle = articles[currentIndex];
 
-      // Fetch metadata only (exclude heavy image_url and full_content fields)
-      const metadataFields = [
-        'title', 'summary', 'source', 'source_url', 'primary_genre',
-        'secondary_genres', 'artist_names', 'image_source',
-        'published_at', 'read_time', 'share_count', 'email_count',
-        'bookmark_count', 'view_count'
-      ];
-
-      let allDocs: any[] = [];
-      let pageToken = '';
-      while (true) {
-        const params = new URLSearchParams();
-        if (apiKey) params.set('key', apiKey);
-        params.set('pageSize', '300');
-        if (pageToken) params.set('pageToken', pageToken);
-        metadataFields.forEach(f => params.append('mask.fieldPaths', f));
-        const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/articles?${params}`;
-        const response = await fetch(url);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        allDocs = allDocs.concat(data.documents || []);
-        pageToken = data.nextPageToken || '';
-        if (!pageToken) break;
-      }
-
-      console.log(`REST API: fetched ${allDocs.length} docs (metadata only)`);
-
-      if (allDocs.length === 0) {
-        setArticles([]);
-        setToast('No articles found.');
-        setLoading(false);
-        return;
-      }
-      
-      const fetchedArticles: MusicNewsArticle[] = allDocs.map((doc: any) => {
-        const fields = doc.fields;
-        const docId = doc.name.split('/').pop();
-        
-        // Helper to get field value
-        const getField = (field: any) => {
-          if (!field) return null;
-          if (field.stringValue !== undefined) return field.stringValue;
-          if (field.integerValue !== undefined) return parseInt(field.integerValue);
-          if (field.doubleValue !== undefined) return field.doubleValue;
-          if (field.arrayValue) {
-            return (field.arrayValue.values || []).map((v: any) => v.stringValue || '');
-          }
-          return null;
-        };
-        
-        return {
-          id: docId,
-          title: getField(fields.title) || '',
-          summary: getField(fields.summary) || '',
-          fullContent: getField(fields.full_content) || '',
-          source: getField(fields.source) || '',
-          sourceUrl: getField(fields.source_url) || '',
-          primaryGenre: getField(fields.primary_genre) || '',
-          secondaryGenres: getField(fields.secondary_genres) || [],
-          artistNames: getField(fields.artist_names) || [],
-          imageUrl: '', // loaded lazily
-          imageSource: getField(fields.image_source) || '',
-          publishedAt: new Date(getField(fields.published_at) || Date.now()),
-          readTime: getField(fields.read_time) || 60,
-          shareCount: getField(fields.share_count) || 0,
-          emailCount: getField(fields.email_count) || 0,
-          bookmarkCount: getField(fields.bookmark_count) || 0,
-          viewCount: getField(fields.view_count) || 0,
-          isBookmarked: false
-        };
-      });
-      
-      // Sort by published_at desc
-      fetchedArticles.sort((a: MusicNewsArticle, b: MusicNewsArticle) => 
-        b.publishedAt.getTime() - a.publishedAt.getTime()
-      );
-      
-      // Filter by genre if needed
-      const filteredArticles = genre === 'all' 
-        ? fetchedArticles 
-        : fetchedArticles.filter((a: MusicNewsArticle) => a.primaryGenre === genre);
-      
-      setArticles(filteredArticles);
-      console.log(`Loaded ${filteredArticles.length} articles from REST API`);
-      
-      if (filteredArticles.length === 0) {
-        setToast('No articles found for this genre.');
-      }
-    } catch (error: any) {
-      console.error('Error fetching articles:', error);
-      console.error('Error message:', error.message);
-      setArticles([]);
-      setToast(`Error: ${error.message || 'Failed to load articles'}`);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Show error/empty toasts from hook
+  useEffect(() => {
+    if (error) setToast(`Error: ${error}`);
+    else if (!loading && articles.length === 0) setToast('No articles found.');
+  }, [error, loading, articles.length]);
 
   // Fetch articles on mount and when genre changes
   useEffect(() => {
     fetchArticles(selectedGenre);
   }, [fetchArticles, selectedGenre]);
-
-  const genres: { id: Genre; label: string; gradient: string }[] = [
-    { id: 'all', label: 'All', gradient: 'from-gray-600 to-gray-500' },
-    { id: 'gospel', label: 'Gospel', gradient: 'from-orange-500 to-amber-500' },
-    { id: 'hiphop', label: 'Hip-Hop', gradient: 'from-violet-600 to-indigo-600' },
-    { id: 'pop', label: 'Pop', gradient: 'from-pink-500 to-rose-500' },
-    { id: 'rock', label: 'Rock', gradient: 'from-red-600 to-orange-600' },
-    { id: 'electronic', label: 'Electronic', gradient: 'from-cyan-600 to-blue-600' },
-    { id: 'tech', label: 'Tech', gradient: 'from-emerald-600 to-teal-600' },
-  ];
-
-  const filteredArticles = selectedGenre === 'all' 
-    ? articles 
-    : articles.filter(a => a.primaryGenre === selectedGenre);
-
-  const currentArticle = filteredArticles[currentIndex];
 
   // Save bookmarks to localStorage
   useEffect(() => {
@@ -325,16 +68,16 @@ function App() {
   }, [bookmarks]);
 
   const trackEvent = useCallback((eventType: string, articleId: string) => {
-    console.log('Analytics:', { 
-      eventType, 
-      articleId, 
+    console.log('Analytics:', {
+      eventType,
+      articleId,
       genre: currentArticle?.primaryGenre,
       timestamp: new Date().toISOString()
     });
   }, [currentArticle]);
 
   const handleSwipe = useCallback((direction: 'up' | 'down') => {
-    if (direction === 'up' && currentIndex < filteredArticles.length - 1) {
+    if (direction === 'up' && currentIndex < articles.length - 1) {
       setSwipeDirection('up');
       setTimeout(() => {
         setCurrentIndex(prev => prev + 1);
@@ -348,15 +91,15 @@ function App() {
         setSwipeDirection(null);
       }, 300);
     }
-  }, [currentIndex, filteredArticles.length, currentArticle, trackEvent]);
+  }, [currentIndex, articles.length, currentArticle, trackEvent]);
 
   const toggleBookmark = useCallback((articleId: string) => {
     setBookmarks(prev => {
       const isBookmarked = prev.includes(articleId);
-      const newBookmarks = isBookmarked 
+      const newBookmarks = isBookmarked
         ? prev.filter(id => id !== articleId)
         : [...prev, articleId];
-      
+
       setToast(isBookmarked ? 'Removed from bookmarks' : 'Added to bookmarks');
       trackEvent(isBookmarked ? 'unbookmark' : 'bookmark', articleId);
       return newBookmarks;
@@ -365,7 +108,7 @@ function App() {
 
   const handleShare = useCallback(async () => {
     if (!currentArticle) return;
-    
+
     try {
       if (navigator.share) {
         await navigator.share({
@@ -385,7 +128,7 @@ function App() {
 
   const handleEmail = useCallback(() => {
     if (!currentArticle) return;
-    
+
     const subject = encodeURIComponent(currentArticle.title);
     const body = encodeURIComponent(`${currentArticle.summary}\n\nRead more: ${currentArticle.sourceUrl}`);
     window.open(`mailto:?subject=${subject}&body=${body}`);
@@ -437,14 +180,13 @@ function App() {
     }
   }, [currentArticle, smsPhone, trackEvent]);
 
-  // Enhanced touch handlers with pull-to-refresh and drag feedback
+  // Touch handlers
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     const touchY = e.targetTouches[0].clientY;
     setTouchEnd(null);
     setTouchStart(touchY);
     setIsDragging(true);
-    
-    // Check if at top of content for pull-to-refresh
+
     if (containerRef.current && containerRef.current.scrollTop === 0) {
       setIsPulling(true);
     }
@@ -453,16 +195,14 @@ function App() {
   const onTouchMove = useCallback((e: React.TouchEvent) => {
     const touchY = e.targetTouches[0].clientY;
     setTouchEnd(touchY);
-    
-    // Handle pull-to-refresh
+
     if (isPulling && touchStart && containerRef.current?.scrollTop === 0) {
       const pullDist = touchStart - touchY;
       if (pullDist < 0) {
         setPullDistance(Math.abs(pullDist));
       }
     }
-    
-    // Visual drag feedback for swipe
+
     if (!isPulling && touchStart && contentRef.current) {
       const diff = touchStart - touchY;
       const translateY = diff * 0.2;
@@ -473,22 +213,21 @@ function App() {
   const onTouchEnd = useCallback(() => {
     setIsDragging(false);
     setIsPulling(false);
-    
-    // Handle pull-to-refresh
+
     if (pullDistance > 80) {
       fetchArticles(selectedGenre);
       setToast('Refreshing content...');
     }
     setPullDistance(0);
-    
+
     if (!touchStart || !touchEnd) {
       if (contentRef.current) contentRef.current.style.transform = '';
       return;
     }
-    
+
     const distance = touchStart - touchEnd;
     const minSwipeDistance = 50;
-    
+
     if (contentRef.current) {
       contentRef.current.style.transform = '';
       contentRef.current.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
@@ -496,7 +235,7 @@ function App() {
         if (contentRef.current) contentRef.current.style.transition = '';
       }, 300);
     }
-    
+
     if (distance > minSwipeDistance) {
       handleSwipe('up');
     } else if (distance < -minSwipeDistance) {
@@ -504,9 +243,12 @@ function App() {
     }
   }, [touchStart, touchEnd, pullDistance, handleSwipe, fetchArticles, selectedGenre]);
 
-  // Keyboard navigation
+  // Keyboard navigation — skip when focus is in an input/textarea
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+
       if (e.key === 'ArrowUp') handleSwipe('down');
       if (e.key === 'ArrowDown') handleSwipe('up');
       if (e.key === 'b') setShowBookmarks(prev => !prev);
@@ -612,7 +354,6 @@ function App() {
                     articleId={currentArticle.id}
                     imageSource={currentArticle.imageSource}
                     primaryGenre={currentArticle.primaryGenre}
-
                     className="h-full w-full object-cover"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/10" />
@@ -648,11 +389,11 @@ function App() {
           <aside className="col-span-12 lg:col-span-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-white/75">More Stories</h3>
-              <span className="text-xs text-white/60">{filteredArticles.length} total</span>
+              <span className="text-xs text-white/60">{articles.length} total</span>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
-              {filteredArticles.map((article) => {
-                const idx = filteredArticles.findIndex(a => a.id === article.id);
+              {articles.map((article) => {
+                const idx = articles.findIndex(a => a.id === article.id);
                 const active = article.id === currentArticle?.id;
                 return (
                   <button
@@ -672,7 +413,6 @@ function App() {
                         articleId={article.id}
                         imageSource={article.imageSource}
                         primaryGenre={article.primaryGenre}
-
                         className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
@@ -698,7 +438,7 @@ function App() {
         <Music className="w-16 h-16 text-white/20 mx-auto mb-4" />
         <p className="text-white/70 text-lg mb-2">No articles found</p>
         <p className="text-white/50 text-sm">Run the scraper to populate Firebase with content</p>
-        <button 
+        <button
           onClick={() => fetchArticles(selectedGenre)}
           className="mt-6 px-6 py-3 bg-white/10 rounded-full text-white hover:bg-white/20 transition-all"
         >
@@ -708,10 +448,9 @@ function App() {
     </div>
   ) : (
     <div className="h-full bg-black flex flex-col overflow-hidden safe-area-top safe-area-bottom">
-      {/* Pull to Refresh Indicator */}
       <PullToRefresh pullDistance={pullDistance} isPulling={isPulling} />
-      
-      {/* Premium Header - Mobile Optimized */}
+
+      {/* Header */}
       <header className="flex items-center justify-between px-4 sm:px-6 py-3 sm:py-4 glass z-50 border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2 sm:gap-3">
           <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-white/10 flex items-center justify-center overflow-hidden border border-white/20">
@@ -724,7 +463,7 @@ function App() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={() => {
               setShowMenu(false);
               setShowBookmarks(true);
@@ -733,8 +472,8 @@ function App() {
             aria-label="View bookmarks"
           >
             <Bookmark className={`w-5 h-5 sm:w-6 sm:h-6 transition-all duration-300 ${
-              bookmarks.length > 0 
-                ? 'text-yellow-400 fill-yellow-400 scale-110' 
+              bookmarks.length > 0
+                ? 'text-yellow-400 fill-yellow-400 scale-110'
                 : 'text-white/60 group-hover:text-white'
             }`} />
             {bookmarks.length > 0 && (
@@ -754,7 +493,7 @@ function App() {
         </div>
       </header>
 
-      {/* Genre Filter - Mobile Optimized */}
+      {/* Genre Filter */}
       <div className="px-4 sm:px-6 py-3 border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2">
           <div className="flex gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide pb-1 flex-1">
@@ -763,8 +502,8 @@ function App() {
                 key={genre.id}
                 onClick={() => setSelectedGenre(genre.id)}
                 className={`relative px-3 sm:px-5 py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-300 btn-press min-h-[36px] sm:min-h-[40px] ${
-                  selectedGenre === genre.id 
-                    ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg` 
+                  selectedGenre === genre.id
+                    ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg`
                     : 'bg-white/5 text-white/75 hover:bg-white/10 hover:text-white'
                 }`}
                 style={{ animationDelay: `${index * 50}ms` }}
@@ -785,7 +524,7 @@ function App() {
       </div>
 
       {/* Main Content Area */}
-      <div 
+      <div
         ref={containerRef}
         className="flex-1 relative overflow-y-auto overflow-x-hidden scrollbar-hide"
         onTouchStart={onTouchStart}
@@ -800,18 +539,18 @@ function App() {
             <ChevronUp className="w-6 h-6 sm:w-8 sm:h-8 text-white animate-pulse" />
           </div>
           <div className={`absolute bottom-28 sm:bottom-32 left-1/2 -translate-x-1/2 transition-all duration-300 ${
-            currentIndex < filteredArticles.length - 1 ? 'opacity-30' : 'opacity-0'
+            currentIndex < articles.length - 1 ? 'opacity-30' : 'opacity-0'
           }`}>
             <ChevronDown className="w-6 h-6 sm:w-8 sm:h-8 text-white animate-pulse" />
           </div>
         </div>
 
         {/* Article Card */}
-        <div 
+        <div
           ref={contentRef}
           className={`min-h-full transition-all duration-300 ${
-            swipeDirection === 'up' ? 'animate-slide-up' : 
-            swipeDirection === 'down' ? 'animate-slide-down' : 
+            swipeDirection === 'up' ? 'animate-slide-up' :
+            swipeDirection === 'down' ? 'animate-slide-down' :
             'animate-fade-in'
           } ${isDragging ? 'cursor-grabbing' : ''}`}
         >
@@ -819,7 +558,6 @@ function App() {
             <ArticleSkeleton />
           ) : (
             <div className="min-h-full flex flex-col p-4 sm:p-6">
-              {/* Image with Gradient Overlay - Smaller size with tags */}
               <div className="relative aspect-[16/9] mb-4 rounded-2xl sm:rounded-3xl overflow-hidden bg-gray-900 shadow-2xl card-hover group">
                 <LazyArticleImage
                   articleId={currentArticle.id}
@@ -828,8 +566,7 @@ function App() {
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/45 to-black/10" />
-                
-                {/* Genre Badge & Source - positioned on image */}
+
                 <div className="absolute top-3 left-3 right-3 flex items-center justify-between">
                   <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[11px] sm:text-xs font-bold uppercase tracking-[0.08em] bg-gradient-to-r ${
                     genres.find(g => g.id === currentArticle.primaryGenre)?.gradient || 'from-gray-600 to-gray-500'
@@ -842,8 +579,7 @@ function App() {
                 </div>
               </div>
 
-              {/* Title - Clickable to bookmark */}
-              <h2 
+              <h2
                 onClick={() => toggleBookmark(currentArticle.id)}
                 className="text-lg sm:text-xl md:text-2xl font-bold text-white mb-3 leading-tight tracking-tight cursor-pointer hover:text-white/80 transition-colors select-none"
               >
@@ -853,23 +589,21 @@ function App() {
                 )}
               </h2>
 
-              {/* Summary - Mobile Optimized */}
               <p className="text-white/90 text-sm sm:text-base leading-relaxed mb-4 flex-1 max-w-[70ch]">
                 {currentArticle.summary}
               </p>
 
-              {/* Meta Info - Mobile Optimized */}
               <div className="flex items-center justify-between mb-4 text-xs sm:text-sm text-white/65">
                 <div className="flex items-center gap-2 sm:gap-4">
-                  <span>{new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { 
-                    month: 'short', 
+                  <span>{new Date(currentArticle.publishedAt).toLocaleDateString('en-US', {
+                    month: 'short',
                     day: 'numeric',
                     year: 'numeric'
                   })}</span>
                   <span className="w-1 h-1 rounded-full bg-white/20" />
                   <span>{currentArticle.readTime}s read</span>
                 </div>
-                <a 
+                <a
                   href={currentArticle.sourceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -881,14 +615,14 @@ function App() {
                 </a>
               </div>
 
-              {/* Action Buttons - Mobile Optimized */}
+              {/* Action Buttons */}
               <div className="flex items-center justify-between gap-3 pt-3 sm:pt-4 border-t border-white/5">
                 <div className="flex gap-2 sm:gap-3">
-                  <button 
+                  <button
                     onClick={() => toggleBookmark(currentArticle.id)}
                     className={`group p-3 sm:p-4 rounded-xl sm:rounded-2xl transition-all duration-300 btn-press min-w-[48px] min-h-[48px] flex items-center justify-center ${
-                      bookmarks.includes(currentArticle.id) 
-                        ? 'bg-yellow-400 text-black shadow-lg shadow-yellow-400/30' 
+                      bookmarks.includes(currentArticle.id)
+                        ? 'bg-yellow-400 text-black shadow-lg shadow-yellow-400/30'
                         : 'bg-white/5 text-white/60 hover:bg-white/10 hover:text-white'
                     }`}
                     aria-label={bookmarks.includes(currentArticle.id) ? 'Remove bookmark' : 'Add bookmark'}
@@ -897,16 +631,16 @@ function App() {
                       bookmarks.includes(currentArticle.id) ? 'scale-110' : 'group-hover:scale-110'
                     }`} />
                   </button>
-                  
-                  <button 
+
+                  <button
                     onClick={handleShare}
                     className="group p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-all duration-300 btn-press min-w-[48px] min-h-[48px] flex items-center justify-center"
                     aria-label="Share article"
                   >
                     <Share2 className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
                   </button>
-                  
-                  <button 
+
+                  <button
                     onClick={handleEmail}
                     className="group p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-white/5 text-white/60 hover:bg-white/10 hover:text-white transition-all duration-300 btn-press min-w-[48px] min-h-[48px] flex items-center justify-center"
                     aria-label="Email article"
@@ -923,7 +657,6 @@ function App() {
                   </button>
                 </div>
 
-                {/* Popularity Score */}
                 <div className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-full bg-white/5">
                   <Heart className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-500 fill-red-500" />
                   <span className="text-xs sm:text-sm font-semibold text-white">
@@ -936,31 +669,30 @@ function App() {
         </div>
       </div>
 
-      {/* Progress Bar - Mobile Optimized */}
+      {/* Progress Bar */}
       <div className="px-4 sm:px-6 py-3 sm:py-4 glass border-t border-white/5 shrink-0 safe-area-bottom">
         <div className="flex justify-between items-center text-xs text-white/65 mb-2">
             <span className="font-medium">
-              {currentIndex + 1} <span className="text-white/35">/</span> {filteredArticles.length}
+              {currentIndex + 1} <span className="text-white/35">/</span> {articles.length}
             </span>
             <span className="text-white/50 hidden sm:inline">Swipe to navigate</span>
         </div>
         <div className="w-full bg-white/5 rounded-full h-1 sm:h-1.5 overflow-hidden">
-          <div 
+          <div
             className="h-full bg-gradient-to-r from-white/80 to-white rounded-full transition-all duration-500 ease-out"
-            style={{ width: `${((currentIndex + 1) / filteredArticles.length) * 100}%` }}
+            style={{ width: `${((currentIndex + 1) / articles.length) * 100}%` }}
           />
         </div>
       </div>
 
-      {/* Bookmarks Bottom Sheet - Mobile Optimized */}
+      {/* Bookmarks Drawer */}
       {showBookmarks && (
         <div className="fixed inset-0 z-50 animate-fade-in">
-          <div 
+          <div
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowBookmarks(false)}
           />
           <div className="absolute right-0 top-0 bottom-0 w-full sm:max-w-md bg-black border-l border-white/10 animate-slide-in-up flex flex-col">
-            {/* Drawer Header */}
             <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-white/10 glass shrink-0">
               <div>
                 <h2 className="text-lg sm:text-xl font-bold">Bookmarks</h2>
@@ -968,7 +700,7 @@ function App() {
                   {bookmarks.length} {bookmarks.length === 1 ? 'article' : 'articles'} saved
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => setShowBookmarks(false)}
                 className="p-2.5 sm:p-3 rounded-full hover:bg-white/10 transition-all duration-300 btn-press min-w-[44px] min-h-[44px] flex items-center justify-center"
                 aria-label="Close bookmarks"
@@ -977,7 +709,6 @@ function App() {
               </button>
             </div>
 
-            {/* Bookmarks List */}
             <div className="flex-1 overflow-y-auto p-4 sm:p-6 scrollbar-hide">
               {bookmarks.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center">
@@ -990,7 +721,7 @@ function App() {
               ) : (
                 <div className="space-y-3 sm:space-y-4">
                   {articles.filter(a => bookmarks.includes(a.id)).map((article, index) => (
-                    <div 
+                    <div
                       key={article.id}
                       className="group p-4 sm:p-5 rounded-xl sm:rounded-2xl bg-white/5 hover:bg-white/10 cursor-pointer transition-all duration-300 card-hover animate-slide-in-up"
                       style={{ animationDelay: `${index * 50}ms` }}
@@ -1014,7 +745,7 @@ function App() {
                             {article.summary}
                           </p>
                         </div>
-                        <button 
+                        <button
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleBookmark(article.id);
@@ -1034,10 +765,9 @@ function App() {
         </div>
       )}
 
-      {/* Toast Notification */}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
-      {/* Slide-out Menu */}
+      {/* Menu Drawer */}
       {showMenu && (
         <div className="fixed inset-0 z-[60] animate-fade-in">
           <div

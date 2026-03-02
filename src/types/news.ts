@@ -2,7 +2,6 @@ export interface MusicNewsArticle {
   id: string;
   title: string;
   summary: string;
-  fullContent?: string;
   source: string;
   sourceUrl: string;
   primaryGenre: 'gospel' | 'hiphop' | 'pop' | 'rock' | 'electronic' | 'tech';
