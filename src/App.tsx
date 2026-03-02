@@ -321,9 +321,9 @@ function App() {
         </div>
 
         {/* Main Grid */}
-        <div className="mx-auto grid max-w-[1400px] grid-cols-12 gap-6 px-6 py-6">
-          {/* Featured Article — sticky on desktop */}
-          <section className="col-span-12 lg:col-span-7 lg:sticky lg:top-[164px] lg:self-start">
+        <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-6 px-4 sm:px-6 py-6 xl:grid-cols-12">
+          {/* Featured Article — sticky on wide desktop */}
+          <section className="xl:col-span-7 xl:sticky xl:top-[164px] xl:self-start">
             {loading ? (
               <ArticleSkeleton />
             ) : !currentArticle ? (
@@ -331,8 +331,8 @@ function App() {
                 No articles available
               </div>
             ) : (
-              <article className="overflow-hidden rounded-2xl lg:rounded-3xl border border-slate-200 bg-white shadow-lg">
-                <div className="relative aspect-[4/3] sm:aspect-[3/2] lg:aspect-[16/9] xl:aspect-[16/9]">
+              <article className="overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white shadow-lg">
+                <div className="relative aspect-[4/3] sm:aspect-[3/2] xl:aspect-[16/9]">
                   <LazyArticleImage
                     articleId={currentArticle.id}
                     imageSource={currentArticle.imageSource}
@@ -351,7 +351,7 @@ function App() {
                 </div>
                 <div className="space-y-2 sm:space-y-3 p-4 sm:p-5 lg:p-6">
                   <h2 className="text-lg sm:text-xl lg:text-2xl font-extrabold leading-tight tracking-tight text-slate-900">{currentArticle.title}</h2>
-                  <p className="text-sm sm:text-base max-w-[68ch] leading-relaxed text-slate-600">{currentArticle.summary}</p>
+                  <p className="text-sm sm:text-base leading-relaxed text-slate-600">{currentArticle.summary}</p>
                   <div className="flex items-center justify-between pt-1 sm:pt-2 text-xs sm:text-sm text-slate-500">
                     <span>{new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     <a
@@ -370,12 +370,12 @@ function App() {
           </section>
 
           {/* More Stories sidebar */}
-          <aside className="col-span-12 lg:col-span-5">
+          <aside className="xl:col-span-5">
             <div className="mb-3 flex items-center justify-between">
               <h3 className="text-sm font-bold uppercase tracking-[0.14em] text-slate-500">More Stories</h3>
               <span className="text-xs text-slate-400">{articles.length} total</span>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 grid-cols-2 lg:grid-cols-3 xl:grid-cols-2">
               {articles.map((article) => {
                 const idx = articles.findIndex(a => a.id === article.id);
                 const active = article.id === currentArticle?.id;
