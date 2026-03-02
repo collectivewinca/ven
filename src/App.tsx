@@ -323,7 +323,7 @@ function App() {
         {/* Main Grid */}
         <div className="mx-auto grid max-w-[1400px] grid-cols-1 gap-6 px-4 sm:px-6 py-6 xl:grid-cols-12">
           {/* Featured Article — sticky on wide desktop */}
-          <section className="xl:col-span-7 xl:sticky xl:top-[164px] xl:self-start">
+          <section className="xl:col-span-7 xl:sticky xl:top-[164px] xl:self-start xl:max-h-[calc(100dvh-164px-1.5rem)] xl:overflow-y-auto xl:scrollbar-hide">
             {loading ? (
               <ArticleSkeleton />
             ) : !currentArticle ? (
@@ -352,16 +352,16 @@ function App() {
                 <div className="space-y-2 sm:space-y-3 p-4 sm:p-5 lg:p-6">
                   <h2 className="text-lg sm:text-xl lg:text-2xl font-extrabold leading-tight tracking-tight text-slate-900">{currentArticle.title}</h2>
                   <p className="text-sm sm:text-base leading-relaxed text-slate-600">{currentArticle.summary}</p>
-                  <div className="flex items-center justify-between pt-1 sm:pt-2 text-xs sm:text-sm text-slate-500">
+                  <div className="flex items-center justify-between pt-2 sm:pt-3 text-xs sm:text-sm text-slate-500">
                     <span>{new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                     <a
                       href={currentArticle.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full border border-slate-200 px-2.5 py-1 sm:px-3 sm:py-1.5 text-xs sm:text-sm text-slate-600 transition hover:bg-slate-50"
+                      className="inline-flex items-center gap-1.5 sm:gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-medium text-slate-700 transition hover:bg-slate-100 hover:border-slate-300"
                       onClick={() => trackEvent('external_link', currentArticle.id)}
                     >
-                      Source <ExternalLink className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                      Read source <ExternalLink className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                     </a>
                   </div>
                 </div>
