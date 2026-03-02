@@ -909,6 +909,17 @@ function App() {
 
   return (
     <div className={showDesktopShell ? 'desktop-shell-scene' : ''}>
+      {showDesktopShell && (
+        <button
+          onClick={() => setUseDesktopShell(false)}
+          className="fixed top-4 right-4 z-[80] rounded-full border border-indigo-300 bg-indigo-50 p-2.5 text-indigo-600 shadow-lg transition hover:bg-indigo-100"
+          aria-label="Exit phone preview"
+          type="button"
+        >
+          <Smartphone className="h-4 w-4" />
+        </button>
+      )}
+
       {isDesktopGalleryMode ? (
         desktopGalleryContent
       ) : (
