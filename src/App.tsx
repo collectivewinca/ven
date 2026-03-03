@@ -332,7 +332,7 @@ function App() {
               </div>
             ) : (
               <article className="overflow-hidden rounded-2xl sm:rounded-3xl border border-slate-200 bg-white shadow-lg">
-                <div className="relative aspect-[4/3] sm:aspect-[3/2] xl:aspect-[16/9]">
+                <div className="relative aspect-[4/3] sm:aspect-[3/2] xl:aspect-[2.5/1]">
                   <LazyArticleImage
                     articleId={currentArticle.id}
                     imageSource={currentArticle.imageSource}
