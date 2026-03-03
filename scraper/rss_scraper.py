@@ -705,7 +705,7 @@ class RSSScraper:
             words = content.split()[:60]
             return " ".join(words) + "." if words else title
 
-        GEMINI_SUMMARY_MODEL = "gemini-2.5-flash"
+        GEMINI_SUMMARY_MODEL = "gemini-3-flash-preview"
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
             f"{GEMINI_SUMMARY_MODEL}:generateContent"
