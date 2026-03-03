@@ -1,9 +1,9 @@
 {
-  "name": "y0 — Music Intelligence",
-  "short_name": "y0",
-  "description": "60-second music news briefs for creators. Live headlines across gospel, hip-hop, pop, rock, electronic, and tech.",
-  "theme_color": "#f8fafc",
-  "background_color": "#f8fafc",
+  "name": "miny-ven Music News",
+  "short_name": "miny-ven",
+  "description": "60-word music news updates for creators across Gospel, Hip-Hop, Pop, Rock, and Electronic.",
+  "theme_color": "#0b0b0f",
+  "background_color": "#0b0b0f",
   "display": "standalone",
   "orientation": "portrait",
   "scope": "/",
@@ -13,19 +13,13 @@
       "src": "/icon-192x192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
+      "purpose": "any maskable"
     },
     {
       "src": "/icon-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     }
   ],
   "categories": ["music", "news", "entertainment"]
