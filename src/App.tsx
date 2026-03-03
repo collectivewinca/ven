@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { Genre } from './types/news';
-import { Bookmark, Share2, Mail, Heart, Music, X, ChevronUp, ChevronDown, ExternalLink, RefreshCw, Smartphone, MessageSquare, Send, Menu } from 'lucide-react';
+import { Bookmark, Share2, Mail, Heart, Music, X, ChevronUp, ChevronDown, ExternalLink, RefreshCw, Smartphone, MessageSquare, Send, Menu, Users } from 'lucide-react';
+import { EntitiesDirectory } from './components/EntitiesDirectory';
 import { LazyArticleImage } from './components/LazyArticleImage';
 import { ArticleSkeleton } from './components/ArticleSkeleton';
 import { Toast } from './components/Toast';
@@ -27,6 +28,7 @@ function App() {
   });
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+  const [showDirectory, setShowDirectory] = useState(false);
   const [swipeDirection, setSwipeDirection] = useState<'up' | 'down' | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -828,6 +830,29 @@ function App() {
               </nav>
             </div>
 
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Tools</p>
+              <nav className="space-y-2">
+                <button
+                  onClick={() => {
+                    setShowMenu(false);
+                    setShowDirectory(true);
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white p-3 text-slate-700 transition hover:bg-slate-50"
+                  aria-label="Open entity directory"
+                >
+                  <span className="flex items-center gap-3">
+                    <Users className="h-5 w-5 text-indigo-500" />
+                    <span>
+                      <span className="block text-sm font-semibold text-left">Directory</span>
+                      <span className="block text-xs text-slate-500">Artists, venues, labels</span>
+                    </span>
+                  </span>
+                  <ExternalLink className="h-4 w-4 text-slate-400" />
+                </button>
+              </nav>
+            </div>
+
             <div className="mt-auto space-y-2">
               <p className="text-[11px] uppercase tracking-[0.14em] text-slate-500">Actions</p>
               <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
@@ -861,6 +886,11 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Entity Directory */}
+      {showDirectory && (
+        <EntitiesDirectory onClose={() => setShowDirectory(false)} />
       )}
 
       {/* SMS Modal */}
