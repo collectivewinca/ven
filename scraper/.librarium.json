@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "defaults": {
+    "outputDir": "./agents/librarium",
+    "maxParallel": 3,
+    "timeout": 30,
+    "mode": "sync"
+  },
+  "providers": {
+    "perplexity-sonar-pro": {
+      "enabled": true,
+      "apiKey": "$PERPLEXITY_API_KEY"
+    },
+    "exa": {
+      "enabled": true,
+      "apiKey": "$EXA_API_KEY"
+    },
+    "brave-search": {
+      "enabled": true,
+      "apiKey": "$BRAVE_API_KEY"
+    },
+    "brave-answers": {
+      "enabled": true,
+      "apiKey": "$BRAVE_API_KEY"
+    },
+    "perplexity-search": {
+      "enabled": true,
+      "apiKey": "$PERPLEXITY_API_KEY"
+    }
+  }
+}
