@@ -176,6 +176,9 @@ def _score_item(title: str, text: str, link: str, source_label: str) -> Tuple[in
     reasons: List[str] = []
 
     music_hits = sum(1 for keyword in MUSIC_KEYWORDS if keyword in haystack)
+    if not music_hits:
+        # Enforce at least one explicit music signal so we don't surface purely technical posts.
+        return 0, "no-music-signal"
     if music_hits:
         score += min(6, music_hits)
         reasons.append(f"music:{music_hits}")
