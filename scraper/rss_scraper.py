@@ -164,16 +164,24 @@ GENRE_KEYWORDS = {
         "ambient",
     ],
     "tech": [
-        "tech",
-        "technology",
-        "ai",
-        "software",
-        "startup",
-        "developer",
-        "open source",
-        "github",
-        "hacker",
-        "programming",
+        "music tech",
+        "music technology",
+        "audio software",
+        "music ai",
+        "music streaming",
+        "streaming platform",
+        "music api",
+        "daw",
+        "midi",
+        "synth",
+        "synthesizer",
+        "audio plugin",
+        "vst",
+        "music production",
+        "beatmaking",
+        "music startup",
+        "music app",
+        "sound design",
     ],
 }
 
@@ -691,15 +699,17 @@ class RSSScraper:
 
         return "", "none"
 
-    def summarize_with_deepseek(self, title: str, content: str) -> str:
-        """Summarize article to exactly 60 words using DeepSeek API"""
-        DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
-        DEEPSEEK_URL = "https://api.deepseek.com/chat/completions"
-
-        if not DEEPSEEK_API_KEY:
-            # Fallback without API
+    def summarize_with_gemini(self, title: str, content: str) -> str:
+        """Summarize article to exactly 60 words using Gemini 2.5 Flash"""
+        if not GEMINI_API_KEY:
             words = content.split()[:60]
             return " ".join(words) + "." if words else title
+
+        GEMINI_SUMMARY_MODEL = "gemini-2.5-flash"
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"{GEMINI_SUMMARY_MODEL}:generateContent"
+        )
 
         prompt = f"""Summarize this music news article in EXACTLY 60 words or less.
 
@@ -709,43 +719,48 @@ Content: {content[:2000]}
 
 Requirements:
 - Exactly 60 words maximum
-- Include artist names
-- Mention the key development/news
-- Keep it engaging and concise
-- No filler words
+- Include artist names, labels, or platforms mentioned
+- Mention the key development or news angle
+- Write in a punchy music-journalist tone
+- No filler words, no meta-commentary
+- If this is not music-related, say SKIP
 
 Summary (60 words max):"""
 
-        headers = {
-            "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        data = {
-            "model": "deepseek-chat",
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a professional music journalist who writes concise 60-word summaries.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            "max_tokens": 100,
-            "temperature": 0.7,
-            "stream": False,
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are a professional music journalist who writes concise 60-word news briefs for creators."
+                    }
+                ]
+            },
+            "generationConfig": {
+                "maxOutputTokens": 256,
+                "temperature": 0.7,
+            },
         }
 
         try:
             response = requests.post(
-                DEEPSEEK_URL, headers=headers, json=data, timeout=30
+                url,
+                headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                json=payload,
+                timeout=30,
             )
             response.raise_for_status()
             result = response.json()
-            summary = result["choices"][0]["message"]["content"].strip()
+            summary = (
+                result.get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+                .strip()
+            )
 
-            # Guard against model meta-commentary
-            if self._is_refusal(summary):
-                print("  ⚠ DeepSeek refused summary, using fallback")
+            if not summary or self._is_refusal(summary) or summary.upper().startswith("SKIP"):
+                print("  ⚠ Gemini refused/skipped summary, using fallback")
                 words = content.split()[:60]
                 return " ".join(words) + "." if words else title
 
@@ -755,7 +770,7 @@ Summary (60 words max):"""
 
             return summary
         except Exception as e:
-            print(f"  ⚠ DeepSeek error: {e}, using fallback")
+            print(f"  ⚠ Gemini summary error: {e}, using fallback")
             words = content.split()[:60]
             return " ".join(words) + "." if words else title
 
@@ -984,6 +999,29 @@ New CTA Headline:"""
             title = f"{power_word}: {title}"
 
         return title.strip()
+
+    # Music-relevance keywords — at least one must appear for non-RSS articles
+    MUSIC_RELEVANCE_KEYWORDS = {
+        "music", "song", "songs", "album", "albums", "artist", "artists",
+        "band", "bands", "tour", "tours", "concert", "festival", "dj",
+        "hip hop", "hip-hop", "rap", "rapper", "pop", "rock", "gospel",
+        "electronic", "edm", "r&b", "rnb", "singer", "vocalist",
+        "grammy", "billboard", "spotify", "vinyl", "record label",
+        "mixtape", "ep ", "lp ", "single", "remix", "producer",
+        "beats", "lyrics", "verse", "chorus", "track", "tracklist",
+        "streaming", "playlist", "soundcloud", "apple music",
+        "music video", "headliner", "genre", "indie", "punk", "metal",
+        "jazz", "classical", "country", "reggae", "latin", "afrobeat",
+        "k-pop", "idol", "boyband", "girlband",
+    }
+
+    def is_music_relevant(self, title: str, content: str, source_genre: str) -> bool:
+        """Gate: reject articles with no music relevance."""
+        # Trusted RSS sources (pitchfork, billboard, etc.) are always relevant
+        if source_genre in ("gospel", "mixed"):
+            return True
+        text = (title + " " + content).lower()
+        return any(kw in text for kw in self.MUSIC_RELEVANCE_KEYWORDS)
 
     def classify_genre(self, title: str, content: str, source_genre: str) -> tuple:
         """Classify article genre based on content"""
@@ -1325,7 +1363,7 @@ New CTA Headline:"""
                 if research:
                     content_with_research += f"\n\nAdditional context: {research}"
 
-                summary = self.summarize_with_deepseek(cta_title, content_with_research)
+                summary = self.summarize_with_gemini(cta_title, content_with_research)
 
                 primary_genre, secondary_genres = self.classify_genre(
                     original_title, content, source_config["genre"]
@@ -1462,6 +1500,10 @@ New CTA Headline:"""
                     duplicates += 1
                     continue
 
+                if not self.is_music_relevant(original_title, content, "discovery"):
+                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
+                    continue
+
                 artists = self.extract_artists(original_title, content)
                 main_artist = artists[0] if artists else ""
 
@@ -1470,7 +1512,7 @@ New CTA Headline:"""
                     original_title, content, main_artist
                 )
 
-                summary = self.summarize_with_deepseek(cta_title, content)
+                summary = self.summarize_with_gemini(cta_title, content)
 
                 primary_genre, secondary_genres = self.classify_genre(
                     original_title, content, "mixed"
@@ -1573,6 +1615,10 @@ New CTA Headline:"""
                     duplicates += 1
                     continue
 
+                if not self.is_music_relevant(original_title, content, "discovery"):
+                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
+                    continue
+
                 artists = self.extract_artists(original_title, content)
                 main_artist = artists[0] if artists else ""
 
@@ -1581,7 +1627,7 @@ New CTA Headline:"""
                     original_title, content, main_artist
                 )
 
-                summary = self.summarize_with_deepseek(cta_title, content)
+                summary = self.summarize_with_gemini(cta_title, content)
 
                 primary_genre, secondary_genres = self.classify_genre(
                     original_title, content, "mixed"
@@ -1663,6 +1709,10 @@ New CTA Headline:"""
                     duplicates += 1
                     continue
 
+                if not self.is_music_relevant(original_title, content, "discovery"):
+                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
+                    continue
+
                 artists = self.extract_artists(original_title, content)
                 main_artist = artists[0] if artists else ""
 
@@ -1671,7 +1721,7 @@ New CTA Headline:"""
                     original_title, content, main_artist
                 )
 
-                summary = self.summarize_with_deepseek(cta_title, content)
+                summary = self.summarize_with_gemini(cta_title, content)
 
                 primary_genre, secondary_genres = self.classify_genre(
                     original_title, content, "mixed"
@@ -1754,6 +1804,10 @@ New CTA Headline:"""
                     duplicates += 1
                     continue
 
+                if not self.is_music_relevant(original_title, content, "discovery"):
+                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
+                    continue
+
                 artists = self.extract_artists(original_title, content)
                 main_artist = artists[0] if artists else ""
 
@@ -1761,7 +1815,7 @@ New CTA Headline:"""
                 cta_title = self.generate_cta_headline(
                     original_title, content, main_artist
                 )
-                summary = self.summarize_with_deepseek(cta_title, content)
+                summary = self.summarize_with_gemini(cta_title, content)
 
                 primary_genre, secondary_genres = self.classify_genre(
                     original_title, content, "mixed"

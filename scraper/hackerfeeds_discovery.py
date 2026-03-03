@@ -46,19 +46,19 @@ MUSIC_KEYWORDS = {
 }
 
 TECH_KEYWORDS = {
-    "tech",
-    "technology",
-    "ai",
-    "software",
-    "startup",
-    "developer",
-    "open source",
-    "programming",
-    "github",
-    "machine learning",
-    "llm",
-    "saas",
-    "api",
+    "music tech",
+    "audio software",
+    "music ai",
+    "music streaming",
+    "daw",
+    "midi",
+    "synth",
+    "audio plugin",
+    "vst",
+    "music production",
+    "music app",
+    "sound design",
+    "music api",
 }
 
 HIGH_SIGNAL_DOMAINS = {
@@ -86,7 +86,7 @@ REDDIT_TOPICS = [
     "MusicTechnology",
 ]
 
-MIN_SCORE = 4
+MIN_SCORE = 6
 
 
 def is_available() -> bool:
