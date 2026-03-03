@@ -20,6 +20,10 @@
         "mention_score": 25
       },
       {
+        "name": "RAYE",
+        "mention_score": 20
+      },
+      {
         "name": "Kanye West",
         "mention_score": 20
       },
@@ -29,10 +33,6 @@
       },
       {
         "name": "Domani",
-        "mention_score": 15
-      },
-      {
-        "name": "RAYE",
         "mention_score": 15
       },
       {
@@ -165,6 +165,14 @@
       },
       {
         "name": "JAY-Z",
+        "mention_score": 10
+      },
+      {
+        "name": "MIKA",
+        "mention_score": 10
+      },
+      {
+        "name": "Oliver \"Power\" Grant",
         "mention_score": 10
       },
       {
@@ -532,10 +540,6 @@
         "mention_score": 5
       },
       {
-        "name": "MIKA",
-        "mention_score": 5
-      },
-      {
         "name": "Jillian Lauren",
         "mention_score": 5
       },
@@ -549,10 +553,6 @@
       },
       {
         "name": "Jakob Nowell",
-        "mention_score": 5
-      },
-      {
-        "name": "Oliver \u201cPower\u201d Grant",
         "mention_score": 5
       },
       {
@@ -936,10 +936,6 @@
         "mention_score": 5
       },
       {
-        "name": "Mika",
-        "mention_score": 5
-      },
-      {
         "name": "Yungblud",
         "mention_score": 5
       },
@@ -949,14 +945,6 @@
       },
       {
         "name": "Bj\u00f6rk",
-        "mention_score": 5
-      },
-      {
-        "name": "Raye",
-        "mention_score": 5
-      },
-      {
-        "name": "Oliver \u2018Power\u2019 Grant",
         "mention_score": 5
       },
       {
@@ -2113,5 +2101,5 @@
       }
     ]
   },
-  "total_unique_entities": 524
+  "total_unique_entities": 521
 }

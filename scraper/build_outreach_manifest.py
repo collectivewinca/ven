@@ -23,6 +23,10 @@ MERGE_MAP = {
     "Sean 'Diddy'": "Diddy",
     "Ye": "Kanye West",
     "Fred again..": "Fred again..",
+    "Mika": "MIKA",
+    "Raye": "RAYE",
+    "Oliver \u2018Power\u2019 Grant": 'Oliver "Power" Grant',
+    "Oliver \u201cPower\u201d Grant": 'Oliver "Power" Grant',
 
     # Bands
     "BLACKPINK": "Blackpink",
