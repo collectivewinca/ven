@@ -704,9 +704,15 @@ class RSSScraper:
         return "", "none"
 
     def summarize_with_gemini(self, title: str, content: str) -> str:
-        """Summarize article to exactly 60 words using Gemini 2.5 Flash"""
+        """Summarize article to exactly 60 words using Gemini. Fetches URL if content is sparse."""
+        # If content is too sparse, try fetching the source URL from title context
+        if len(content.split()) < 40 and content.startswith("http"):
+            content = self._fetch_article_text(content) or content
+
         if not GEMINI_API_KEY:
-            words = content.split()[:60]
+            words = content.split()
+            if len(words) >= 60:
+                return " ".join(words[:60]) + "."
             return " ".join(words) + "." if words else title
 
         GEMINI_SUMMARY_MODEL = "gemini-3-flash-preview"
@@ -715,28 +721,28 @@ class RSSScraper:
             f"{GEMINI_SUMMARY_MODEL}:generateContent"
         )
 
-        prompt = f"""Summarize this music news article in EXACTLY 60 words or less.
+        prompt = f"""Write a 60-word music news summary. Count every word carefully — it must be between 55 and 65 words.
 
 Title: {title}
 
-Content: {content[:2000]}
+Article: {content[:2000]}
 
-Requirements:
-- Exactly 60 words maximum
-- Include artist names, labels, or platforms mentioned
-- Mention the key development or news angle
-- Write in a punchy music-journalist tone
-- No filler words, no meta-commentary
-- If this is not music-related, say SKIP
+Rules:
+- MUST be 55–65 words (count carefully before responding)
+- Include the artist name, the news development, and why it matters
+- Punchy music-journalist tone — no filler, no fluff
+- If article is thin, expand with context about the artist or event
+- Do NOT start with "Summary:" or the title
+- If this is clearly not music-related, say SKIP
 
-Summary (60 words max):"""
+Your 60-word summary:"""
 
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
             "systemInstruction": {
                 "parts": [
                     {
-                        "text": "You are a professional music journalist who writes concise 60-word news briefs for creators."
+                        "text": "You are a professional music journalist writing 60-word news briefs. Always write the full 60 words — never truncate early."
                     }
                 ]
             },
@@ -765,18 +771,77 @@ Summary (60 words max):"""
 
             if not summary or self._is_refusal(summary) or summary.upper().startswith("SKIP"):
                 print("  ⚠ Gemini refused/skipped summary, using fallback")
-                words = content.split()[:60]
-                return " ".join(words) + "." if words else title
+                words = content.split()
+                return " ".join(words[:60]) + "." if words else title
 
+            # Hard cap at 70 words
             words = summary.split()
-            if len(words) > 60:
-                summary = " ".join(words[:60]) + "."
+            if len(words) > 70:
+                summary = " ".join(words[:70]) + "."
+
+            # If still under 40 words, retry once with stronger instruction
+            if len(words) < 40:
+                summary = self._expand_summary_gemini(title, content, summary)
 
             return summary
         except Exception as e:
             print(f"  ⚠ Gemini summary error: {e}, using fallback")
-            words = content.split()[:60]
-            return " ".join(words) + "." if words else title
+            words = content.split()
+            return " ".join(words[:60]) + "." if words else title
+
+    def _expand_summary_gemini(self, title: str, content: str, short_summary: str) -> str:
+        """If initial summary is too short, ask Gemini to expand it to 60 words."""
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-3-flash-preview:generateContent"
+        )
+        prompt = f"""This summary is too short. Expand it to exactly 60 words.
+
+Title: {title}
+Original article: {content[:1000]}
+Short draft: {short_summary}
+
+Rewrite as a full 60-word music news brief. Count each word. Return only the summary text."""
+
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": 256, "temperature": 0.6},
+        }
+        try:
+            resp = requests.post(
+                url,
+                headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                json=payload,
+                timeout=20,
+            )
+            resp.raise_for_status()
+            expanded = (
+                resp.json()
+                .get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+                .strip()
+            )
+            if expanded and len(expanded.split()) >= 40:
+                words = expanded.split()
+                return " ".join(words[:70]) + ("." if not expanded.rstrip().endswith(".") else "")
+        except Exception:
+            pass
+        return short_summary
+
+    def _fetch_article_text(self, url: str) -> str:
+        """Lightly fetch an article URL to get more text when Exa only returned a snippet."""
+        try:
+            resp = self.session.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+            if resp.status_code != 200:
+                return ""
+            # Strip HTML tags and return first 1500 chars of body text
+            text = re.sub(r"<[^>]+>", " ", resp.text)
+            text = re.sub(r"\s+", " ", text).strip()
+            return text[:1500]
+        except Exception:
+            return ""
 
     # Phrases that indicate the model broke character instead of
     # producing a real headline or summary.  Checked case-insensitively
@@ -909,13 +974,15 @@ Summary (60 words max):"""
     def generate_cta_headline(
         self, original_title: str, content: str, artist: str
     ) -> str:
-        """Generate high-converting CTA headline using Perplexity SDK"""
-        if not _perplexity_client or self.perplexity_disabled:
-            return self._transform_title_fallback(original_title)
+        """Generate high-converting CTA headline using Perplexity, with Gemini fallback."""
+        # Strip source suffixes from original title before rewriting
+        clean_title = re.sub(r"\s*[|\-–]\s*[A-Z][^|]{3,40}$", "", original_title).strip()
+        clean_title = re.sub(r"\s*\([^)]{3,40}\)\s*$", "", clean_title).strip() or clean_title
 
-        prompt = f"""Create an engaging, click-worthy headline for this music news story.
+        if _perplexity_client and not self.perplexity_disabled:
+            prompt = f"""Create an engaging, click-worthy headline for this music news story.
 
-Original Title: {original_title}
+Original Title: {clean_title}
 Artist: {artist}
 Content Summary: {content[:500]}
 
@@ -928,79 +995,112 @@ Requirements:
 - Avoid clickbait that doesn't deliver
 - Return ONLY the headline text, no markdown or citations
 
-Examples of good CTA headlines:
-- "Breaking: [Artist] Just Dropped Something Huge"
-- "The Real Reason [Artist] Is Making Waves"
-- "What [Artist] Just Revealed Changes Everything"
-- "Exclusive: Inside [Artist]'s Latest Move"
-
 New CTA Headline:"""
 
+            try:
+                result = _perplexity_client.chat.completions.create(
+                    model="sonar",
+                    messages=[
+                        {
+                            "role": "system",
+                            "content": (
+                                "You are a viral headline writer for a music news app. "
+                                "Create headlines that get clicks while staying authentic "
+                                "to the story. Return ONLY the headline, no markdown "
+                                "formatting, no citations, no brackets."
+                            ),
+                        },
+                        {"role": "user", "content": prompt},
+                    ],
+                    max_tokens=100,
+                    temperature=0.8,
+                )
+                headline = result.choices[0].message.content.strip()
+                headline = self._clean_perplexity_text(headline)
+
+                if not self._is_refusal(headline):
+                    if len(headline) > 100:
+                        headline = headline[:97] + "..."
+                    return headline
+                print("  ⚠ Perplexity refused headline, trying Gemini...")
+            except Exception as e:
+                self._disable_perplexity_if_needed(e, "cta_headline")
+                print(f"  ⚠ CTA headline error: {self._trim_error(e)}, trying Gemini...")
+
+        # Gemini fallback for CTA headline
+        if GEMINI_API_KEY:
+            return self._generate_cta_headline_gemini(clean_title, content, artist)
+
+        return self._transform_title_fallback(clean_title)
+
+    def _generate_cta_headline_gemini(self, title: str, content: str, artist: str) -> str:
+        """Generate CTA headline via Gemini when Perplexity is unavailable."""
+        prompt = f"""Write a punchy, click-worthy music news headline.
+
+Original: {title}
+Artist: {artist or "unknown"}
+Context: {content[:400]}
+
+Rules:
+- Start with one power word: Breaking / Exclusive / Revealed / Unveiled / Must-See / Inside / Watch
+- Keep under 80 characters total
+- No source names, no URLs, no quotes around the whole thing
+- Return the headline only — no explanation
+
+Headline:"""
+
+        url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/"
+            f"gemini-3-flash-preview:generateContent"
+        )
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"maxOutputTokens": 80, "temperature": 0.9},
+        }
         try:
-            result = _perplexity_client.chat.completions.create(
-                model="sonar",
-                messages=[
-                    {
-                        "role": "system",
-                        "content": (
-                            "You are a viral headline writer for a music news app. "
-                            "Create headlines that get clicks while staying authentic "
-                            "to the story. Return ONLY the headline, no markdown "
-                            "formatting, no citations, no brackets."
-                        ),
-                    },
-                    {"role": "user", "content": prompt},
-                ],
-                max_tokens=100,
-                temperature=0.8,
+            resp = requests.post(
+                url,
+                headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                json=payload,
+                timeout=15,
             )
-            headline = result.choices[0].message.content.strip()
-            headline = self._clean_perplexity_text(headline)
-
-            # Guard against model refusals / meta-commentary
-            if self._is_refusal(headline):
-                print("  ⚠ Perplexity refused headline, using fallback")
-                return self._transform_title_fallback(original_title)
-
-            # Ensure it's not too long
-            if len(headline) > 100:
-                headline = headline[:97] + "..."
-
-            return headline
+            resp.raise_for_status()
+            headline = (
+                resp.json()
+                .get("candidates", [{}])[0]
+                .get("content", {})
+                .get("parts", [{}])[0]
+                .get("text", "")
+                .strip()
+            )
+            if headline and not self._is_refusal(headline):
+                return headline[:100]
         except Exception as e:
-            self._disable_perplexity_if_needed(e, "cta_headline")
-            print(f"  ⚠ CTA headline error: {self._trim_error(e)}, using fallback")
-            return self._transform_title_fallback(original_title)
+            print(f"  ⚠ Gemini CTA error: {e}")
+        return self._transform_title_fallback(title)
 
     def _transform_title_fallback(self, original_title: str) -> str:
-        """Fallback method to transform title without API"""
-        # Remove publication names and common prefixes
+        """Fallback method to transform title without API — strips source names and adds power word."""
+        title = original_title
+        # Strip trailing " | Source Name" and " - Source Name" patterns
+        title = re.sub(r"\s*[|\-–]\s*[A-Z][^|]{3,50}$", "", title).strip()
+        title = re.sub(r"\s*\([^)]{3,50}\)\s*$", "", title).strip()
+        # Remove publication-style prefixes
         title = re.sub(
             r"^(Premiere:|Exclusive:|Watch:|Listen:|Review:|Interview:)\s*",
             "",
-            original_title,
+            title,
             flags=re.IGNORECASE,
         )
+        title = title.strip() or original_title
 
         # Power words to add
-        power_words = [
-            "Breaking",
-            "Exclusive",
-            "Revealed",
-            "Unveiled",
-            "Must-See",
-            "Inside",
-        ]
-
-        # Check if title already has power words
-        has_power_word = any(word.lower() in title.lower() for word in power_words)
+        power_words = ["Breaking", "Exclusive", "Revealed", "Unveiled", "Must-See", "Inside"]
+        has_power_word = any(w.lower() in title.lower() for w in power_words)
 
         if not has_power_word and len(title) < 70:
-            # Add a power word
             import random
-
-            power_word = random.choice(power_words)
-            title = f"{power_word}: {title}"
+            title = f"{random.choice(power_words)}: {title}"
 
         return title.strip()
 
