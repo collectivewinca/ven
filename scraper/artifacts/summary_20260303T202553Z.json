@@ -1,0 +1,44 @@
+{
+  "finished_at": "2026-03-03T20:27:50.415005Z",
+  "run_id": "20260303T202553Z",
+  "source_stats": {
+    "archive": {
+      "archived": 0
+    },
+    "billboard": {
+      "items_found": 10,
+      "saved": 0
+    },
+    "exa_discovery": {
+      "items_found": 0,
+      "saved": 0
+    },
+    "hackerfeeds_discovery": {
+      "items_found": 0,
+      "saved": 0
+    },
+    "jesusfreakhideout": {
+      "items_found": 1550,
+      "saved": 0
+    },
+    "librarium_discovery": {
+      "items_found": 0,
+      "saved": 0
+    },
+    "pitchfork_news": {
+      "items_found": 29,
+      "saved": 0
+    },
+    "pitchfork_reviews": {
+      "items_found": 30,
+      "saved": 0
+    },
+    "rollingstone_music": {
+      "items_found": 10,
+      "saved": 0
+    }
+  },
+  "total_fetched_items": 1629,
+  "total_processed": 0,
+  "version": "rss-main-plus-artifacts"
+}

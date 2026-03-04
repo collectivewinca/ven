@@ -1,11 +1,12 @@
-const CACHE_NAME = 'miny-ven-v1';
+const CACHE_NAME = 'miny-ven-v2';
 const urlsToCache = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/src/main.tsx',
-  '/src/App.tsx',
-  '/src/index.css'
+  '/favicon-32x32.png',
+  '/favicon-16x16.png',
+  '/apple-touch-icon.png',
+  '/branding/minylogo.png',
 ];
 
 self.addEventListener('install', (event) => {

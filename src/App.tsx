@@ -731,7 +731,7 @@ function App() {
   const isDesktopGalleryMode = isDesktopViewport && !useDesktopShell;
 
   const desktopGalleryContent = (
-    <div className="h-[100dvh] overflow-hidden bg-[radial-gradient(circle_at_8%_8%,#1f2937_0%,#111827_40%,#030712_100%)] text-white">
+    <div className="h-dvh overflow-hidden bg-[radial-gradient(circle_at_8%_8%,#1f2937_0%,#111827_40%,#030712_100%)] text-white">
       <div className="h-full overflow-y-auto scrollbar-hide">
         <div className="sticky top-0 z-20 border-b border-white/10 bg-black/40 backdrop-blur-xl">
           <div className="mx-auto max-w-[1400px] px-6 py-5">
@@ -1490,7 +1490,7 @@ function App() {
           </>
         )}
 
-        <div className={showDesktopShell ? 'iphone-shell-screen' : 'h-[100dvh]'}>
+        <div className={showDesktopShell ? 'iphone-shell-screen' : 'h-dvh'}>
           {appContent}
         </div>
       </div>
