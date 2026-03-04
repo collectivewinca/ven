@@ -1425,6 +1425,21 @@ New CTA Headline:"""
         ("gospel christian worship music artist new release", "gospel"),
     ]
 
+    # Location-focused music news queries — each targets a specific city/region scene
+    EXA_LOCATION_QUERIES = [
+        ("Stockholm Copenhagen Scandinavian music artist new album release", "scandinavia"),
+        ("Amsterdam Netherlands music scene DJ producer new release", "amsterdam"),
+        ("Morocco Moroccan music gnawa fusion artist new release", "morocco"),
+        ("New York City NYC music artist new album underground scene release", "nyc"),
+        ("Mexico City Mexican music urban Latin artist release", "mexico"),
+        ("Medellín Colombia Colombian urban music artist new release", "medellin"),
+        ("São Paulo Brazil Brazilian music funk hip hop artist release", "brazil"),
+        ("Miami music artist new release Latin urban Florida scene", "miami"),
+        ("Dominican Republic dembow bachata merengue artist new release", "caribbean"),
+        ("Tokyo Japan J-pop J-rock Japanese hip hop artist release", "tokyo"),
+        ("Bali Indonesia Southeast Asian music artist scene release", "bali"),
+    ]
+
     # URL patterns that indicate a list/index page rather than an article
     _EXA_SKIP_URL_PATTERNS = [
         r"^https?://[^/]+/?$",                        # bare homepage
@@ -1710,6 +1725,39 @@ New CTA Headline:"""
                     )
             except Exception as e:
                 print(f"  ⚠ Exa query error ({query[:40]}...): {e}")
+
+        # Location-specific music news
+        print("  🌍 Running location queries...")
+        for query, location_hint in self.EXA_LOCATION_QUERIES:
+            try:
+                result = _exa_client.search(
+                    query,
+                    type="auto",
+                    num_results=5,
+                    start_published_date=cutoff,
+                    contents={"text": {"max_characters": 3000}},
+                )
+                for r in result.results:
+                    if not r.url or not r.title:
+                        continue
+                    if not self._is_article_url(r.url) or not getattr(r, "published_date", None):
+                        skipped_urls += 1
+                        continue
+                    text = re.sub(r"<[^>]+>", "", r.text or "").strip()
+                    text = re.sub(r"\s+", " ", text)
+                    items.append(
+                        {
+                            "title": r.title.strip(),
+                            "link": r.url,
+                            "description": text[:500],
+                            "content": text,
+                            "pub_date": r.published_date or "",
+                            "image": getattr(r, "image", None),
+                            "genre_hint": location_hint,
+                        }
+                    )
+            except Exception as e:
+                print(f"  ⚠ Exa location query error ({query[:40]}...): {e}")
 
         print(f"  Found {len(items)} article URLs ({skipped_urls} index/list pages skipped)")
 
