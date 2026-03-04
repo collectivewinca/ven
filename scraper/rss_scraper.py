@@ -208,9 +208,14 @@ class Article:
 
 
 class RSSScraper:
+    # Max articles for the same primary artist in the active (72h) window.
+    # Prevents one artist/event dominating the feed.
+    MAX_ARTICLES_PER_ARTIST = 2
+
     def __init__(self):
         self.existing_source_urls: Set[str] = set()
         self.existing_titles: Set[str] = set()
+        self.existing_artist_counts: Dict[str, int] = {}
         self.session = requests.Session()
         self.run_id = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
         self.events: List[Dict[str, object]] = []
@@ -1120,6 +1125,7 @@ New CTA Headline:"""
 
         self.existing_source_urls.clear()
         self.existing_titles.clear()
+        self.existing_artist_counts.clear()
         page_token = ""
 
         while True:
@@ -1148,6 +1154,17 @@ New CTA Headline:"""
                         self.existing_source_urls.add(self._normalize_url(source_url))
                     if title:
                         self.existing_titles.add(title.lower().strip())
+                    # Track artist coverage for saturation check
+                    for val in (
+                        fields.get("artist_names", {})
+                        .get("arrayValue", {})
+                        .get("values", [])
+                    ):
+                        name = val.get("stringValue", "").lower().strip()
+                        if name:
+                            self.existing_artist_counts[name] = (
+                                self.existing_artist_counts.get(name, 0) + 1
+                            )
 
                 page_token = data.get("nextPageToken", "")
                 if not page_token:
@@ -1158,8 +1175,17 @@ New CTA Headline:"""
                 return
 
         print(
-            f"Loaded duplicate index: {len(self.existing_source_urls)} URLs, {len(self.existing_titles)} titles"
+            f"Loaded duplicate index: {len(self.existing_source_urls)} URLs, "
+            f"{len(self.existing_titles)} titles, "
+            f"{len(self.existing_artist_counts)} tracked artists"
         )
+
+    def _artist_limit_reached(self, artist_names: List[str]) -> bool:
+        """Return True if the primary artist already has MAX_ARTICLES_PER_ARTIST active articles."""
+        if not artist_names:
+            return False
+        primary = artist_names[0].lower().strip()
+        return bool(primary and self.existing_artist_counts.get(primary, 0) >= self.MAX_ARTICLES_PER_ARTIST)
 
     def check_duplicate(self, title: str, source_url: str) -> bool:
         """Check duplicates primarily via canonical source URL."""
@@ -1258,6 +1284,10 @@ New CTA Headline:"""
                 if canonical_url:
                     self.existing_source_urls.add(canonical_url)
                 self.existing_titles.add((article.title or "").lower().strip())
+                for name in (article.artist_names or []):
+                    key = name.lower().strip()
+                    if key:
+                        self.existing_artist_counts[key] = self.existing_artist_counts.get(key, 0) + 1
                 return True
             else:
                 detail = ""
@@ -1288,6 +1318,10 @@ New CTA Headline:"""
                         if canonical_url:
                             self.existing_source_urls.add(canonical_url)
                         self.existing_titles.add((article.title or "").lower().strip())
+                        for name in (article.artist_names or []):
+                            key = name.lower().strip()
+                            if key:
+                                self.existing_artist_counts[key] = self.existing_artist_counts.get(key, 0) + 1
                         return True
 
                 print(f"  ✗ Failed to save: {response.status_code} — {detail}")
@@ -1343,11 +1377,20 @@ New CTA Headline:"""
                 artists = self.extract_artists(original_title, content)
                 main_artist = artists[0] if artists else ""
 
+                if self._artist_limit_reached(artists):
+                    print(f"  ⛔ Artist cap reached: {main_artist[:40]}")
+                    continue
+
                 # Generate high-CTA headline (not copy-paste)
                 print(f"  📝 Generating CTA headline...")
                 cta_title = self.generate_cta_headline(
                     original_title, content, main_artist
                 )
+
+                # Skip if the generated CTA title is already in the feed
+                if cta_title.lower().strip() in self.existing_titles:
+                    print(f"  ⚠ Duplicate CTA title: {cta_title[:50]}...")
+                    continue
 
                 # Research with Exa (falls back to Perplexity)
                 research = ""
@@ -1539,10 +1582,18 @@ New CTA Headline:"""
                 artists = self.extract_artists(original_title, content)
                 main_artist = artists[0] if artists else ""
 
+                if self._artist_limit_reached(artists):
+                    print(f"  ⛔ Artist cap reached: {main_artist[:40]}")
+                    continue
+
                 print(f"  📝 Generating CTA headline...")
                 cta_title = self.generate_cta_headline(
                     original_title, content, main_artist
                 )
+
+                if cta_title.lower().strip() in self.existing_titles:
+                    print(f"  ⚠ Duplicate CTA title: {cta_title[:50]}...")
+                    continue
 
                 summary = self.summarize_with_gemini(cta_title, content)
 
@@ -1785,10 +1836,18 @@ New CTA Headline:"""
                 artists = self.extract_artists(original_title, content)
                 main_artist = artists[0] if artists else ""
 
+                if self._artist_limit_reached(artists):
+                    print(f"  ⛔ Artist cap reached: {main_artist[:40]}")
+                    continue
+
                 print(f"  📝 Generating CTA headline...")
                 cta_title = self.generate_cta_headline(
                     original_title, content, main_artist
                 )
+
+                if cta_title.lower().strip() in self.existing_titles:
+                    print(f"  ⚠ Duplicate CTA title: {cta_title[:50]}...")
+                    continue
 
                 summary = self.summarize_with_gemini(cta_title, content)
 
@@ -1881,10 +1940,18 @@ New CTA Headline:"""
                 artists = self.extract_artists(original_title, content)
                 main_artist = artists[0] if artists else ""
 
+                if self._artist_limit_reached(artists):
+                    print(f"  ⛔ Artist cap reached: {main_artist[:40]}")
+                    continue
+
                 print(f"  📝 Generating CTA headline...")
                 cta_title = self.generate_cta_headline(
                     original_title, content, main_artist
                 )
+
+                if cta_title.lower().strip() in self.existing_titles:
+                    print(f"  ⚠ Duplicate CTA title: {cta_title[:50]}...")
+                    continue
 
                 summary = self.summarize_with_gemini(cta_title, content)
 
