@@ -747,7 +747,7 @@ Your 60-word summary:"""
                 ]
             },
             "generationConfig": {
-                "maxOutputTokens": 256,
+                "maxOutputTokens": 4096,
                 "temperature": 0.7,
             },
         }
@@ -805,7 +805,7 @@ Rewrite as a full 60-word music news brief. Count each word. Return only the sum
 
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 256, "temperature": 0.6},
+            "generationConfig": {"maxOutputTokens": 4096, "temperature": 0.6},
         }
         try:
             resp = requests.post(
@@ -1055,7 +1055,10 @@ Headline:"""
         )
         payload = {
             "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 80, "temperature": 0.9},
+            "generationConfig": {
+                "maxOutputTokens": 1024,
+                "temperature": 0.9,
+            },
         }
         try:
             resp = requests.post(
