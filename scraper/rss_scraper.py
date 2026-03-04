@@ -1451,7 +1451,7 @@ New CTA Headline:"""
         print("\n🔎 Discovering articles via Perplexity (Exa fallback)...")
         items: List[Dict] = []
 
-        for query in self.EXA_QUERIES:
+        for query, _genre_hint in self.EXA_QUERIES:
             prompt = (
                 f"Find 3 recent music news articles about: {query}. "
                 "For each article, provide ONLY a JSON array with objects "
@@ -1584,11 +1584,85 @@ New CTA Headline:"""
             if re.search(pattern, url, re.IGNORECASE):
                 return False
         # Must have a meaningful path segment (slug) beyond just a domain
-        from urllib.parse import urlparse
-        path = urlparse(url).path.rstrip("/")
+        path = urlsplit(url).path.rstrip("/")
         if not path or path.count("/") < 1:
             return False
         return True
+
+    # Known domain → clean outlet name mappings
+    _OUTLET_NAMES: Dict[str, str] = {
+        "pitchfork.com": "Pitchfork",
+        "rollingstone.com": "Rolling Stone",
+        "billboard.com": "Billboard",
+        "nme.com": "NME",
+        "allhiphop.com": "AllHipHop",
+        "hotnewhiphop.com": "HotNewHipHop",
+        "hiphopdx.com": "HipHopDX",
+        "xxlmag.com": "XXL",
+        "thefader.com": "The FADER",
+        "complex.com": "Complex",
+        "rap-up.com": "Rap-Up",
+        "okayplayer.com": "OkayPlayer",
+        "djmag.com": "DJ Mag",
+        "residentadvisor.net": "Resident Advisor",
+        "ra.co": "Resident Advisor",
+        "edmtunes.com": "EDMTunes",
+        "edm.com": "EDM.com",
+        "edmidentity.com": "EDM Identity",
+        "djbooth.net": "DJBooth",
+        "kerrang.com": "Kerrang!",
+        "loudwire.com": "Loudwire",
+        "altpress.com": "Alternative Press",
+        "consequenceofsound.net": "Consequence",
+        "consequence.net": "Consequence",
+        "stereogum.com": "Stereogum",
+        "spin.com": "Spin",
+        "npr.org": "NPR Music",
+        "theguardian.com": "The Guardian",
+        "nytimes.com": "New York Times",
+        "variety.com": "Variety",
+        "hollywoodreporter.com": "Hollywood Reporter",
+        "musicbusinessworldwide.com": "Music Business Worldwide",
+        "musicweek.com": "Music Week",
+        "thegroove.io": "The Groove",
+        "gospel.com": "Gospel.com",
+        "gospelflava.com": "GospelFlava",
+        "absolutelygospel.com": "Absolutely Gospel",
+        "singingnews.com": "Singing News",
+        "jesusfreakhideout.com": "JFH",
+        "newreleasetoday.com": "New Release Today",
+        "rocksound.tv": "Rock Sound",
+        "punknews.org": "Punknews",
+        "metalinjection.net": "Metal Injection",
+        "blabbermouth.net": "Blabbermouth",
+        "theprp.com": "The PRP",
+        "tmz.com": "TMZ",
+        "pagesix.com": "Page Six",
+        "hypebeast.com": "Hypebeast",
+    }
+
+    def _outlet_name_from_url(self, url: str) -> str:
+        """Derive a clean outlet name from the article URL."""
+        try:
+            host = urlsplit(url).netloc.lower()
+            if host.startswith("www."):
+                host = host[4:]
+            # Exact match first
+            if host in self._OUTLET_NAMES:
+                return self._OUTLET_NAMES[host]
+            # Suffix match (e.g. sub.pitchfork.com)
+            for domain, name in self._OUTLET_NAMES.items():
+                if host.endswith(f".{domain}"):
+                    return name
+            # Fallback: clean up the domain into a readable name
+            # e.g. thehypemagazine.com → The Hype Magazine
+            base = host.split(".")[0]
+            # CamelCase split and title-case
+            base = re.sub(r"([a-z])([A-Z])", r"\1 \2", base)
+            base = re.sub(r"[-_]", " ", base)
+            return base.title()
+        except Exception:
+            return "Music News"
 
     def discover_exa_articles(self) -> Tuple[int, int]:
         """Discover fresh music news via Exa search and process them.
@@ -1609,7 +1683,7 @@ New CTA Headline:"""
             try:
                 result = _exa_client.search(
                     query,
-                    type="news",
+                    type="auto",
                     num_results=8,
                     start_published_date=cutoff,
                     contents={"text": {"max_characters": 3000}},
@@ -1617,7 +1691,8 @@ New CTA Headline:"""
                 for r in result.results:
                     if not r.url or not r.title:
                         continue
-                    if not self._is_article_url(r.url):
+                    # Skip index pages by URL pattern OR by missing published_date
+                    if not self._is_article_url(r.url) or not getattr(r, "published_date", None):
                         skipped_urls += 1
                         continue
                     text = re.sub(r"<[^>]+>", "", r.text or "").strip()
@@ -1628,8 +1703,8 @@ New CTA Headline:"""
                             "link": r.url,
                             "description": text[:500],
                             "content": text,
-                            "pub_date": getattr(r, "published_date", "") or "",
-                            "image": None,
+                            "pub_date": r.published_date or "",
+                            "image": getattr(r, "image", None),
                             "genre_hint": genre_hint,
                         }
                     )
@@ -1681,8 +1756,7 @@ New CTA Headline:"""
                     primary_genre=primary_genre,
                 )
 
-                genre_hint = item.get("genre_hint", "")
-                source_label = f"Exa ({genre_hint})" if genre_hint else "Exa Discovery"
+                source_label = self._outlet_name_from_url(item["link"])
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
