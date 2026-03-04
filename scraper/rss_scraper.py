@@ -24,7 +24,6 @@ from urllib.parse import urlsplit, urlunsplit, urljoin
 from email.utils import parsedate_to_datetime
 
 import librarium_discovery
-import hackerfeeds_discovery
 
 # Load environment variables
 try:
@@ -1770,104 +1769,7 @@ New CTA Headline:"""
         )
         return processed, len(items)
 
-    # ------------------------------------------------------------------
-    # hacker-feeds discovery (supplementary, after librarium)
-    # ------------------------------------------------------------------
 
-    def discover_hackerfeeds_articles(self) -> Tuple[int, int]:
-        """Discover additional candidate links from hacker-feeds CLI."""
-        if not hackerfeeds_discovery.is_available():
-            print("\n⚠ hf CLI not available, skipping hackerfeeds discovery")
-            return 0, 0
-
-        print("\n🔎 Discovering articles via hacker-feeds (supplementary)...")
-        items = hackerfeeds_discovery.discover()
-
-        if not items:
-            print("  hacker-feeds returned no results")
-            return 0, 0
-
-        print(f"  Found {len(items)} hacker-feeds results")
-
-        processed = 0
-        duplicates = 0
-        errors = 0
-
-        for item in items:
-            try:
-                original_title = item["title"]
-                content = (
-                    item.get("content") or item.get("description") or original_title
-                )
-
-                if self.check_duplicate(original_title, item["link"]):
-                    duplicates += 1
-                    continue
-
-                if not self.is_music_relevant(original_title, content, "discovery"):
-                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
-                    continue
-
-                artists = self.extract_artists(original_title, content)
-                main_artist = artists[0] if artists else ""
-
-                print("  📝 Generating CTA headline...")
-                cta_title = self.generate_cta_headline(
-                    original_title, content, main_artist
-                )
-                summary = self.summarize_with_gemini(cta_title, content)
-
-                primary_genre, secondary_genres = self.classify_genre(
-                    original_title, content, "mixed"
-                )
-
-                pub_date = self.parse_pub_date(item.get("pub_date", ""))
-                image_url, image_source = self.resolve_article_image(
-                    item,
-                    title=cta_title,
-                    artist_names=artists,
-                    primary_genre=primary_genre,
-                )
-
-                source_label = "HackerFeeds Discovery"
-                source_hint = str(item.get("source_hint", "")).strip()
-                if source_hint:
-                    source_label = f"HackerFeeds ({source_hint})"
-
-                article = Article(
-                    id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
-                    title=cta_title,
-                    summary=summary,
-                    full_content=content[:2000],
-                    source=source_label,
-                    source_url=self._normalize_source_url(item["link"]),
-                    primary_genre=primary_genre,
-                    secondary_genres=secondary_genres,
-                    artist_names=artists,
-                    image_url=image_url,
-                    published_at=pub_date,
-                    read_time=60,
-                    share_count=0,
-                    email_count=0,
-                    bookmark_count=0,
-                    view_count=0,
-                    fetched_at=datetime.now(),
-                    image_source=image_source,
-                )
-
-                if self.save_to_firebase(article):
-                    processed += 1
-
-            except Exception as e:
-                errors += 1
-                print(f"  ✗ Error processing hacker-feeds item: {e}")
-                continue
-
-        print(
-            f"  [hackerfeeds_discovery] items={len(items)} "
-            f"saved={processed} duplicates={duplicates} errors={errors}"
-        )
-        return processed, len(items)
 
     # ------------------------------------------------------------------
     # Archive stale articles
@@ -2001,11 +1903,6 @@ New CTA Headline:"""
             print(
                 "⚠️  Warning: Librarium CLI not installed. Supplementary discovery disabled."
             )
-
-        if hackerfeeds_discovery.is_available():
-            print("✓ hacker-feeds CLI available for supplementary discovery")
-        else:
-            print("⚠️  Warning: hf CLI not installed. hacker-feeds discovery disabled.")
         print()
 
         total_processed = 0
@@ -2065,24 +1962,6 @@ New CTA Headline:"""
             )
 
         # 4. Archive stale articles
-        try:
-            hf_processed, hf_items = self.discover_hackerfeeds_articles()
-            total_processed += hf_processed
-            total_fetched_items += hf_items
-            source_stats["hackerfeeds_discovery"] = {
-                "saved": hf_processed,
-                "items_found": hf_items,
-            }
-        except Exception as e:
-            print(f"  ✗ Error with hacker-feeds discovery: {e}")
-            self._log_event(
-                "source_failed",
-                level="error",
-                source="hackerfeeds_discovery",
-                error=str(e),
-            )
-
-        # 5. Archive stale articles
         try:
             archived_count = self.archive_stale_articles()
             source_stats["archive"] = {"archived": archived_count}
