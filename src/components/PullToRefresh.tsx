@@ -16,10 +16,10 @@ export function PullToRefresh({ pullDistance, isPulling }: { pullDistance: numbe
       }}
     >
       <div
-        className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center"
+        className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"
         style={{ transform: `rotate(${rotation}deg)` }}
       >
-        <RefreshCw className="w-5 h-5 text-slate-600" />
+        <RefreshCw className="w-5 h-5 text-white" />
       </div>
     </div>
   );

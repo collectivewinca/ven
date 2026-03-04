@@ -25,13 +25,13 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="h-[100dvh] bg-slate-50 flex items-center justify-center">
+        <div className="h-[100dvh] bg-[#0a0a0f] flex items-center justify-center">
           <div className="text-center px-6 max-w-md">
-            <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl text-red-500">!</span>
+            <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
+              <span className="text-3xl text-red-400">!</span>
             </div>
-            <h2 className="text-slate-900 text-lg font-bold mb-2">Something went wrong</h2>
-            <p className="text-slate-500 text-sm mb-6">
+            <h2 className="text-white text-lg font-bold mb-2">Something went wrong</h2>
+            <p className="text-white/50 text-sm mb-6">
               {this.state.error?.message || 'An unexpected error occurred.'}
             </p>
             <button
@@ -39,7 +39,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 this.setState({ hasError: false, error: null });
                 window.location.reload();
               }}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 rounded-full text-white hover:bg-slate-800 transition-all"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 rounded-full text-white hover:bg-white/20 transition-all"
             >
               <RefreshCw className="w-4 h-4" />
               Reload App
