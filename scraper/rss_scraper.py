@@ -12,7 +12,7 @@ import json
 import requests
 import re
 import io
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, List, Set, Tuple
 from dataclasses import dataclass, asdict
 import os
@@ -1416,12 +1416,30 @@ New CTA Headline:"""
     # Exa news discovery
     # ------------------------------------------------------------------
 
+    # Each entry: (query, genre_label)
     EXA_QUERIES = [
-        "latest hip hop rap music news today",
-        "new pop music releases albums today",
-        "rock alternative music news today",
-        "electronic EDM music news today",
-        "gospel christian music news today",
+        ("hip hop rap artist news new album single drop", "hiphop"),
+        ("new pop album release review artist announcement", "pop"),
+        ("rock alternative indie punk metal band news album", "rock"),
+        ("electronic EDM house techno DJ new track festival lineup", "electronic"),
+        ("gospel christian worship music artist new release", "gospel"),
+    ]
+
+    # URL patterns that indicate a list/index page rather than an article
+    _EXA_SKIP_URL_PATTERNS = [
+        r"^https?://[^/]+/?$",                        # bare homepage
+        r"/news/?$", r"/music/?$", r"/articles/?$",   # section index pages
+        r"/category/", r"/tag/", r"/genre/",           # taxonomy pages
+        r"/new/?$", r"/latest/?$", r"/feed/?$",        # feed/listing pages
+        r"open\.spotify\.com", r"music\.apple\.com",  # streaming platforms
+        r"amazon\.com/music", r"tidal\.com",
+        r"facebook\.com", r"instagram\.com",           # social media
+        r"twitter\.com", r"reddit\.com",
+        r"^https?://bit\.ly", r"^https?://trib\.al",  # link shorteners
+        r"^https?://apple\.co", r"^https?://amzn\.",
+        r"metacritic\.com/browse", r"albumoftheyear\.org/(releases|upcoming|genre)",
+        r"popvortex\.com/music/charts",
+        r"charts\.apple", r"/top-charts",
     ]
 
     def _discover_perplexity_fallback(self) -> Tuple[int, int]:
@@ -1560,6 +1578,18 @@ New CTA Headline:"""
         )
         return processed, len(items)
 
+    def _is_article_url(self, url: str) -> bool:
+        """Return False if the URL looks like a homepage, list, or non-article page."""
+        for pattern in self._EXA_SKIP_URL_PATTERNS:
+            if re.search(pattern, url, re.IGNORECASE):
+                return False
+        # Must have a meaningful path segment (slug) beyond just a domain
+        from urllib.parse import urlparse
+        path = urlparse(url).path.rstrip("/")
+        if not path or path.count("/") < 1:
+            return False
+        return True
+
     def discover_exa_articles(self) -> Tuple[int, int]:
         """Discover fresh music news via Exa search and process them.
         Falls back to Perplexity-based discovery when Exa is unavailable."""
@@ -1568,17 +1598,27 @@ New CTA Headline:"""
 
         print("\n🔎 Discovering articles via Exa...")
         items: List[Dict] = []
+        skipped_urls = 0
 
-        for query in self.EXA_QUERIES:
+        # Only look back 72 hours for freshness
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=72)).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+
+        for query, genre_hint in self.EXA_QUERIES:
             try:
                 result = _exa_client.search(
                     query,
-                    type="auto",
-                    num_results=5,
-                    contents={"text": {"max_characters": 2000}},
+                    type="news",
+                    num_results=8,
+                    start_published_date=cutoff,
+                    contents={"text": {"max_characters": 3000}},
                 )
                 for r in result.results:
                     if not r.url or not r.title:
+                        continue
+                    if not self._is_article_url(r.url):
+                        skipped_urls += 1
                         continue
                     text = re.sub(r"<[^>]+>", "", r.text or "").strip()
                     text = re.sub(r"\s+", " ", text)
@@ -1588,14 +1628,15 @@ New CTA Headline:"""
                             "link": r.url,
                             "description": text[:500],
                             "content": text,
-                            "pub_date": "",
+                            "pub_date": getattr(r, "published_date", "") or "",
                             "image": None,
+                            "genre_hint": genre_hint,
                         }
                     )
             except Exception as e:
-                print(f"  ⚠ Exa query error ({query[:30]}...): {e}")
+                print(f"  ⚠ Exa query error ({query[:40]}...): {e}")
 
-        print(f"  Found {len(items)} Exa results")
+        print(f"  Found {len(items)} article URLs ({skipped_urls} index/list pages skipped)")
 
         if not items:
             print("  Exa returned no results, falling back to Perplexity...")
@@ -1629,7 +1670,7 @@ New CTA Headline:"""
                 summary = self.summarize_with_gemini(cta_title, content)
 
                 primary_genre, secondary_genres = self.classify_genre(
-                    original_title, content, "mixed"
+                    original_title, content, item.get("genre_hint", "mixed")
                 )
 
                 pub_date = self.parse_pub_date(item.get("pub_date", ""))
@@ -1640,12 +1681,15 @@ New CTA Headline:"""
                     primary_genre=primary_genre,
                 )
 
+                genre_hint = item.get("genre_hint", "")
+                source_label = f"Exa ({genre_hint})" if genre_hint else "Exa Discovery"
+
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
                     title=cta_title,
                     summary=summary,
                     full_content=content[:2000],
-                    source="Exa Discovery",
+                    source=source_label,
                     source_url=self._normalize_source_url(item["link"]),
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
