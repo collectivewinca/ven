@@ -533,42 +533,45 @@ function App() {
 
   // ---------- Action buttons (shared) ----------
 
+  const actionBtnClass = "rounded-xl transition-all duration-200 btn-press flex items-center justify-center p-2 md:p-2.5 lg:p-3 min-w-[36px] min-h-[36px] md:min-w-[40px] md:min-h-[40px] lg:min-w-[44px] lg:min-h-[44px]";
+  const actionIconClass = "w-4 h-4 md:w-[18px] md:h-[18px] lg:w-5 lg:h-5";
+
   const renderActions = () => {
     if (!currentArticle) return null;
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 md:gap-2 lg:gap-3">
         <button
           onClick={() => toggleBookmark(currentArticle.id)}
-          className={`p-2.5 rounded-xl transition-all duration-200 btn-press min-w-[40px] min-h-[40px] flex items-center justify-center ${
+          className={`${actionBtnClass} ${
             bookmarks.includes(currentArticle.id)
               ? 'bg-amber-500/20 text-amber-400'
               : 'bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white'
           }`}
           aria-label={bookmarks.includes(currentArticle.id) ? 'Remove bookmark' : 'Add bookmark'}
         >
-          <Bookmark className={`w-[18px] h-[18px] ${bookmarks.includes(currentArticle.id) ? 'fill-amber-400' : ''}`} />
+          <Bookmark className={`${actionIconClass} ${bookmarks.includes(currentArticle.id) ? 'fill-amber-400' : ''}`} />
         </button>
 
         <button
           onClick={handleShare}
-          className="p-2.5 rounded-xl bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white transition-all duration-200 btn-press min-w-[40px] min-h-[40px] flex items-center justify-center"
+          className={`${actionBtnClass} bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white`}
           aria-label="Share article"
         >
-          <Share2 className="w-[18px] h-[18px]" />
+          <Share2 className={actionIconClass} />
         </button>
 
         <button
           onClick={handleListen}
           disabled={audioLoading}
-          className="p-2.5 rounded-xl bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white transition-all duration-200 btn-press min-w-[40px] min-h-[40px] flex items-center justify-center disabled:opacity-50"
+          className={`${actionBtnClass} bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white disabled:opacity-50`}
           aria-label="Listen to article"
         >
           {audioLoading ? (
-            <RefreshCw className="w-[18px] h-[18px] animate-spin" />
+            <RefreshCw className={`${actionIconClass} animate-spin`} />
           ) : isAudioPlaying && audioArticleId === currentArticle.id ? (
-            <Pause className="w-[18px] h-[18px]" />
+            <Pause className={actionIconClass} />
           ) : (
-            <Volume2 className="w-[18px] h-[18px]" />
+            <Volume2 className={actionIconClass} />
           )}
         </button>
 
@@ -576,11 +579,11 @@ function App() {
           href={currentArticle.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="p-2.5 rounded-xl bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white transition-all duration-200 min-w-[40px] min-h-[40px] flex items-center justify-center"
+          className={`${actionBtnClass} bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white`}
           onClick={() => trackEvent('external_link', currentArticle.id)}
           aria-label="Open source article"
         >
-          <ExternalLink className="w-[18px] h-[18px]" />
+          <ExternalLink className={actionIconClass} />
         </a>
       </div>
     );
@@ -619,24 +622,24 @@ function App() {
       {/* ─── Header ─── */}
       <header className="shrink-0 z-50 border-b border-white/[0.05] glass">
         {/* Top bar */}
-        <div className="flex items-center justify-between px-4 md:px-8 py-3">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-white/[0.07] flex items-center justify-center overflow-hidden border border-white/[0.08]">
-              <img src="/branding/minylogo.png" alt="miny y0" className="w-7 h-7 object-contain" />
+        <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-2.5 md:py-3 lg:py-3.5">
+          <div className="flex items-center gap-2.5 md:gap-3">
+            <div className="w-8 h-8 md:w-9 md:h-9 lg:w-10 lg:h-10 rounded-xl bg-white/[0.07] flex items-center justify-center overflow-hidden border border-white/[0.08]">
+              <img src="/branding/minylogo.png" alt="miny y0" className="w-6 h-6 md:w-7 md:h-7 lg:w-8 lg:h-8 object-contain" />
             </div>
             <div>
-              <h1 className="font-display text-base font-extrabold tracking-tight leading-none">y0</h1>
-              <p className="text-[9px] uppercase tracking-[0.2em] text-white/30 font-medium mt-0.5">Music Intelligence</p>
+              <h1 className="font-display text-sm md:text-base lg:text-lg font-extrabold tracking-tight leading-none">y0</h1>
+              <p className="text-[8px] md:text-[9px] lg:text-[10px] uppercase tracking-[0.2em] text-white/30 font-medium mt-0.5">Music Intelligence</p>
             </div>
           </div>
 
           {/* Desktop: genre pills inline */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="hidden md:flex items-center gap-1 lg:gap-1.5">
             {genres.map((genre) => (
               <button
                 key={genre.id}
                 onClick={() => setSelectedGenre(genre.id)}
-                className={`px-4 py-1.5 rounded-full text-[11px] font-semibold uppercase tracking-[0.08em] transition-all duration-250 ${
+                className={`px-3 md:px-4 lg:px-5 py-1 md:py-1.5 lg:py-2 rounded-full text-[10px] md:text-[11px] lg:text-xs font-semibold uppercase tracking-[0.08em] transition-all duration-250 ${
                   selectedGenre === genre.id
                     ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg shadow-white/[0.04]`
                     : 'text-white/45 hover:text-white/80 hover:bg-white/[0.06]'
@@ -647,24 +650,24 @@ function App() {
             ))}
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 md:gap-1">
             <button
               onClick={() => fetchArticles(selectedGenre)}
-              className="hidden md:flex p-2.5 rounded-full text-white/35 hover:text-white/70 hover:bg-white/[0.06] transition-all min-w-[36px] min-h-[36px] items-center justify-center"
+              className="hidden md:flex p-2 md:p-2.5 lg:p-3 rounded-full text-white/35 hover:text-white/70 hover:bg-white/[0.06] transition-all min-w-[34px] min-h-[34px] md:min-w-[36px] md:min-h-[36px] lg:min-w-[40px] lg:min-h-[40px] items-center justify-center"
               disabled={loading}
               aria-label="Refresh articles"
             >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw className={`w-3.5 h-3.5 md:w-4 md:h-4 lg:w-[18px] lg:h-[18px] ${loading ? 'animate-spin' : ''}`} />
             </button>
             <button
               onClick={() => {
                 setShowMenu(false);
                 setShowBookmarks(true);
               }}
-              className="relative p-2.5 rounded-full hover:bg-white/[0.06] transition-all min-w-[36px] min-h-[36px] flex items-center justify-center"
+              className="relative p-2 md:p-2.5 lg:p-3 rounded-full hover:bg-white/[0.06] transition-all min-w-[34px] min-h-[34px] md:min-w-[36px] md:min-h-[36px] lg:min-w-[40px] lg:min-h-[40px] flex items-center justify-center"
               aria-label="View bookmarks"
             >
-              <Bookmark className={`w-[17px] h-[17px] transition-all ${
+              <Bookmark className={`w-4 h-4 md:w-[17px] md:h-[17px] lg:w-[19px] lg:h-[19px] transition-all ${
                 bookmarks.length > 0
                   ? 'text-amber-400 fill-amber-400'
                   : 'text-white/35 hover:text-white/70'
@@ -677,10 +680,10 @@ function App() {
             </button>
             <button
               onClick={() => setShowMenu(true)}
-              className="p-2.5 rounded-full hover:bg-white/[0.06] transition-all min-w-[36px] min-h-[36px] flex items-center justify-center md:hidden"
+              className="p-2 md:p-2.5 rounded-full hover:bg-white/[0.06] transition-all min-w-[34px] min-h-[34px] md:min-w-[36px] md:min-h-[36px] flex items-center justify-center md:hidden"
               aria-label="Open menu"
             >
-              <Menu className="w-[17px] h-[17px] text-white/35" />
+              <Menu className="w-4 h-4 md:w-[17px] md:h-[17px] text-white/35" />
             </button>
           </div>
         </div>
