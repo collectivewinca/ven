@@ -537,8 +537,29 @@ def cmd_run(cfg: Dict[str, Any], args: argparse.Namespace) -> int:
         "PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python; "
         "$PY rss_scraper.py 2>&1 | tee -a "
         f"{shlex.quote(log_dir)}/rss-$(date +%Y%m%d).log"
+        " && echo '--- entity tracker ---' && "
+        "$PY entity_tracker.py --hours 72 2>&1 | tee -a "
+        f"{shlex.quote(log_dir)}/rss-$(date +%Y%m%d).log"
     )
     print(f"{BOLD}Triggering scraper run...{RESET}")
+    return run_ssh_stream(cfg, command)
+
+
+def cmd_entities(cfg: Dict[str, Any], args: argparse.Namespace) -> int:
+    """Run entity tracker standalone."""
+    scraper_dir = remote_norm(cfg["paths"]["scraper"], cfg)
+    log_dir = remote_norm(cfg["paths"]["logs"], cfg)
+    hours = args.hours
+    dry_flag = "--dry-run" if args.dry_run else ""
+    command = (
+        f"cd {shlex.quote(scraper_dir)} && "
+        "export PATH=/home/exedev/bin:/home/exedev/.npm-global/bin:$PATH; "
+        "set -a && [ -f .env ] && . ./.env || true; set +a; "
+        "PY=python3; [ -x .venv/bin/python ] && PY=.venv/bin/python; "
+        f"$PY entity_tracker.py --hours {hours} {dry_flag} 2>&1 | tee -a "
+        f"{shlex.quote(log_dir)}/rss-$(date +%Y%m%d).log"
+    )
+    print(f"{BOLD}Running entity tracker (last {hours}h)...{RESET}")
     return run_ssh_stream(cfg, command)
 
 
@@ -1103,6 +1124,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_cron.add_argument("--disable", action="store_true", help="Disable scraper cron")
     p_cron.add_argument("--enable", action="store_true", help="Enable scraper cron")
     p_cron.set_defaults(func=cmd_cron)
+
+    p_entities = sub.add_parser("entities", help="Run entity tracker (artists, albums, tracks)")
+    p_entities.add_argument("--hours", type=int, default=72, help="Lookback window in hours (default: 72)")
+    p_entities.add_argument("--dry-run", action="store_true", help="Print results without writing to Firestore")
+    p_entities.set_defaults(func=cmd_entities)
 
     p_alert = sub.add_parser("alert", help="Configure alert webhook")
     p_alert.add_argument(

@@ -25,13 +25,13 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return (
-        <div className="h-[100dvh] bg-[#0a0a0f] flex items-center justify-center">
+        <div className="h-[100dvh] flex items-center justify-center" style={{ background: 'var(--bg-error)' }}>
           <div className="text-center px-6 max-w-md">
-            <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl text-red-400">!</span>
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: 'rgba(239, 68, 68, 0.1)' }}>
+              <span className="text-3xl" style={{ color: '#ef4444' }}>!</span>
             </div>
-            <h2 className="text-white text-lg font-bold mb-2">Something went wrong</h2>
-            <p className="text-white/50 text-sm mb-6">
+            <h2 className="text-lg font-bold mb-2" style={{ color: 'var(--text-primary)' }}>Something went wrong</h2>
+            <p className="text-sm mb-6" style={{ color: 'var(--text-quaternary)' }}>
               {this.state.error?.message || 'An unexpected error occurred.'}
             </p>
             <button
@@ -39,7 +39,8 @@ export class ErrorBoundary extends Component<Props, State> {
                 this.setState({ hasError: false, error: null });
                 window.location.reload();
               }}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-white/10 rounded-full text-white hover:bg-white/20 transition-all"
+              className="inline-flex items-center gap-2 px-6 py-3 rounded-full transition-all"
+              style={{ background: 'var(--action-bg)', color: 'var(--text-primary)' }}
             >
               <RefreshCw className="w-4 h-4" />
               Reload App

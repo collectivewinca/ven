@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
-import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause } from 'lucide-react';
+import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause, Sun, Moon } from 'lucide-react';
 import { LazyArticleImage } from './components/LazyArticleImage';
 import { ArticleSkeleton } from './components/ArticleSkeleton';
 import { Toast } from './components/Toast';
@@ -26,6 +26,40 @@ function App() {
   const [audioLoading, setAudioLoading] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [audioArticleId, setAudioArticleId] = useState<string | null>(null);
+
+  // ---------- Theme ----------
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const saved = localStorage.getItem('miny-ven-theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+    if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
+    return 'light';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+    localStorage.setItem('miny-ven-theme', theme);
+    // Update meta theme-color
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'dark' ? '#06060a' : '#f5f5f7');
+  }, [theme]);
+
+  // Listen for system preference changes
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => {
+      if (!localStorage.getItem('miny-ven-theme')) {
+        setTheme(e.matches ? 'dark' : 'light');
+      }
+    };
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'dark' ? 'light' : 'dark');
+  }, []);
 
   const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -550,15 +584,17 @@ function App() {
   const renderActions = () => {
     if (!currentArticle) return null;
     return (
-      <div className="flex items-center" style={fluidGap}>
+          <div className="flex items-center" style={fluidGap}>
         <button
           onClick={() => toggleBookmark(currentArticle.id)}
           className={`rounded-xl transition-all duration-200 btn-press flex items-center justify-center ${
-            bookmarks.includes(currentArticle.id)
-              ? 'bg-amber-500/20 text-amber-400'
-              : 'bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white'
+            bookmarks.includes(currentArticle.id) ? 'bg-amber-500/20' : ''
           }`}
-          style={fluidBtn}
+          style={{
+            ...fluidBtn,
+            background: bookmarks.includes(currentArticle.id) ? 'rgba(245, 158, 11, 0.15)' : 'var(--action-bg)',
+            color: bookmarks.includes(currentArticle.id) ? '#f59e0b' : 'var(--action-text)'
+          }}
           aria-label={bookmarks.includes(currentArticle.id) ? 'Remove bookmark' : 'Add bookmark'}
         >
           <Bookmark style={fluidIcon} className={bookmarks.includes(currentArticle.id) ? 'fill-amber-400' : ''} />
@@ -566,8 +602,8 @@ function App() {
 
         <button
           onClick={handleShare}
-          className="rounded-xl bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white transition-all duration-200 btn-press flex items-center justify-center"
-          style={fluidBtn}
+          className="rounded-xl transition-all duration-200 btn-press flex items-center justify-center"
+          style={{ ...fluidBtn, background: 'var(--action-bg)', color: 'var(--action-text)' }}
           aria-label="Share article"
         >
           <Share2 style={fluidIcon} />
@@ -576,8 +612,8 @@ function App() {
         <button
           onClick={handleListen}
           disabled={audioLoading}
-          className="rounded-xl bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white transition-all duration-200 btn-press flex items-center justify-center disabled:opacity-50"
-          style={fluidBtn}
+          className="rounded-xl transition-all duration-200 btn-press flex items-center justify-center disabled:opacity-50"
+          style={{ ...fluidBtn, background: 'var(--action-bg)', color: 'var(--action-text)' }}
           aria-label="Listen to article"
         >
           {audioLoading ? (
@@ -593,8 +629,8 @@ function App() {
           href={currentArticle.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="rounded-xl bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white transition-all duration-200 flex items-center justify-center"
-          style={fluidBtn}
+          className="rounded-xl transition-all duration-200 flex items-center justify-center"
+          style={{ ...fluidBtn, background: 'var(--action-bg)', color: 'var(--action-text)' }}
           onClick={() => trackEvent('external_link', currentArticle.id)}
           aria-label="Open source article"
         >
@@ -608,14 +644,15 @@ function App() {
 
   if (!currentArticle && !loading) {
     return (
-      <div className="h-dvh bg-[#06060a] flex items-center justify-center safe-area-top safe-area-bottom">
+      <div className="h-dvh flex items-center justify-center safe-area-top safe-area-bottom" style={{ background: 'var(--bg-primary)' }}>
         <div className="text-center px-4">
-          <Music className="w-16 h-16 text-white/15 mx-auto mb-6" />
-          <p className="font-display text-white/60 text-lg font-bold mb-2">No articles found</p>
-          <p className="text-white/30 text-sm">Run the scraper to populate Firebase with content</p>
+          <Music className="w-16 h-16 mx-auto mb-6" style={{ color: 'var(--text-faint)' }} />
+          <p className="font-display text-lg font-bold mb-2" style={{ color: 'var(--text-tertiary)' }}>No articles found</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Run the scraper to populate Firebase with content</p>
           <button
             onClick={() => fetchArticles(selectedGenre)}
-            className="mt-8 px-7 py-3 bg-white/[0.07] rounded-full text-white/80 hover:bg-white/[0.12] transition-all font-medium text-sm tracking-wide"
+            className="mt-8 px-7 py-3 rounded-full transition-all font-medium text-sm tracking-wide"
+            style={{ background: 'var(--action-bg)', color: 'var(--text-secondary)' }}
           >
             Retry
           </button>
@@ -625,17 +662,17 @@ function App() {
   }
 
   return (
-    <div className="h-dvh bg-[#06060a] flex flex-col overflow-hidden safe-area-top safe-area-bottom relative">
+    <div className="h-dvh flex flex-col overflow-hidden safe-area-top safe-area-bottom relative" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {/* Atmospheric background glow */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[400px] bg-violet-600/[0.04] rounded-full blur-[120px]" />
-        <div className="absolute bottom-1/4 right-0 w-[500px] h-[350px] bg-cyan-500/[0.03] rounded-full blur-[100px]" />
+        <div className="absolute top-0 left-1/4 w-[600px] h-[400px] rounded-full blur-[120px]" style={{ background: 'var(--glow-a)' }} />
+        <div className="absolute bottom-1/4 right-0 w-[500px] h-[350px] rounded-full blur-[100px]" style={{ background: 'var(--glow-b)' }} />
       </div>
 
       <PullToRefresh pullDistance={pullDistance} isPulling={isPulling} />
 
       {/* ─── Header ─── */}
-      <header className="shrink-0 z-50 border-b border-white/[0.05] glass">
+      <header className="shrink-0 z-50 glass" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
         {/* Top bar */}
         <div className="flex items-center justify-between" style={{ padding: 'clamp(0.5rem, 0.4rem + 0.5vw, 0.875rem) clamp(1rem, 0.75rem + 1vw, 2rem)' }}>
           <div className="flex items-center" style={{ gap: 'clamp(0.625rem, 0.5rem + 0.3vw, 0.75rem)' }}>
@@ -646,8 +683,8 @@ function App() {
               <img src="/branding/minylogo.png" alt="miny y0" className="object-contain" style={{ width: 'clamp(24px, 20px + 0.8vw, 36px)', height: 'clamp(24px, 20px + 0.8vw, 36px)' }} />
             </div>
             <div>
-              <h1 className="font-display font-extrabold tracking-tight leading-none" style={{ fontSize: 'clamp(0.875rem, 0.75rem + 0.4vw, 1.25rem)' }}>y0</h1>
-              <p className="uppercase tracking-[0.2em] text-white/30 font-medium mt-0.5" style={{ fontSize: 'clamp(8px, 7px + 0.2vw, 11px)' }}>Music Intelligence</p>
+              <h1 className="font-display font-extrabold tracking-tight leading-none" style={{ fontSize: 'clamp(0.875rem, 0.75rem + 0.4vw, 1.25rem)', color: 'var(--text-primary)' }}>y0</h1>
+              <p className="uppercase tracking-[0.2em] font-medium mt-0.5" style={{ fontSize: 'clamp(8px, 7px + 0.2vw, 11px)', color: 'var(--text-muted)' }}>Music Intelligence</p>
             </div>
           </div>
 
@@ -659,13 +696,13 @@ function App() {
                 onClick={() => setSelectedGenre(genre.id)}
                 className={`rounded-full font-semibold uppercase tracking-[0.08em] transition-all duration-250 ${
                   selectedGenre === genre.id
-                    ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg shadow-white/[0.04]`
-                    : 'text-white/45 hover:text-white/80 hover:bg-white/[0.06]'
+                    ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg`
+                    : ''
                 }`}
-                style={{
-                  padding: 'clamp(0.25rem, 0.2rem + 0.2vw, 0.5rem) clamp(0.75rem, 0.5rem + 0.5vw, 1.25rem)',
-                  fontSize: 'clamp(10px, 9px + 0.2vw, 13px)',
-                }}
+                style={selectedGenre !== genre.id 
+                  ? { color: 'var(--pill-text)', background: 'transparent', padding: 'clamp(0.25rem, 0.2rem + 0.2vw, 0.5rem) clamp(0.75rem, 0.5rem + 0.5vw, 1.25rem)', fontSize: 'clamp(10px, 9px + 0.2vw, 13px)' }
+                  : { padding: 'clamp(0.25rem, 0.2rem + 0.2vw, 0.5rem) clamp(0.75rem, 0.5rem + 0.5vw, 1.25rem)', fontSize: 'clamp(10px, 9px + 0.2vw, 13px)' }
+                }
               >
                 {genre.label}
               </button>
@@ -674,9 +711,17 @@ function App() {
 
           <div className="flex items-center" style={{ gap: 'clamp(0.125rem, 0.1rem + 0.15vw, 0.375rem)' }}>
             <button
+              onClick={toggleTheme}
+              className="rounded-full transition-all flex items-center justify-center"
+              style={{ ...fluidBtn, color: 'var(--action-text)' }}
+              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {theme === 'dark' ? <Sun style={fluidIcon} /> : <Moon style={fluidIcon} />}
+            </button>
+            <button
               onClick={() => fetchArticles(selectedGenre)}
-              className="hidden md:flex rounded-full text-white/35 hover:text-white/70 hover:bg-white/[0.06] transition-all items-center justify-center"
-              style={fluidBtn}
+              className="hidden md:flex rounded-full transition-all items-center justify-center"
+              style={{ ...fluidBtn, color: 'var(--action-text)' }}
               disabled={loading}
               aria-label="Refresh articles"
             >
@@ -687,14 +732,14 @@ function App() {
                 setShowMenu(false);
                 setShowBookmarks(true);
               }}
-              className="relative rounded-full hover:bg-white/[0.06] transition-all flex items-center justify-center"
+              className="relative rounded-full transition-all flex items-center justify-center"
               style={fluidBtn}
               aria-label="View bookmarks"
             >
               <Bookmark style={fluidIcon} className={`transition-all ${
                 bookmarks.length > 0
                   ? 'text-amber-400 fill-amber-400'
-                  : 'text-white/35 hover:text-white/70'
+                  : ''
               }`} />
               {bookmarks.length > 0 && (
                 <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 text-white text-[9px] font-bold rounded-full flex items-center justify-center animate-scale-in">
@@ -704,11 +749,11 @@ function App() {
             </button>
             <button
               onClick={() => setShowMenu(true)}
-              className="rounded-full hover:bg-white/[0.06] transition-all flex items-center justify-center md:hidden"
-              style={fluidBtn}
+              className="rounded-full transition-all flex items-center justify-center md:hidden"
+              style={{ ...fluidBtn, color: 'var(--action-text)' }}
               aria-label="Open menu"
             >
-              <Menu style={fluidIcon} className="text-white/35" />
+              <Menu style={fluidIcon} />
             </button>
           </div>
         </div>
@@ -723,8 +768,9 @@ function App() {
                 className={`px-3.5 py-1.5 rounded-full text-[11px] font-semibold whitespace-nowrap transition-all duration-250 ${
                   selectedGenre === genre.id
                     ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg`
-                    : 'bg-white/[0.05] text-white/45 hover:bg-white/[0.08] hover:text-white/70'
+                    : ''
                 }`}
+                style={selectedGenre !== genre.id ? { background: 'var(--pill-bg)', color: 'var(--pill-text)' } : undefined}
               >
                 {genre.label}
               </button>
@@ -732,7 +778,8 @@ function App() {
           </div>
           <button
             onClick={() => fetchArticles(selectedGenre)}
-            className="p-2 rounded-full bg-white/[0.05] text-white/35 hover:bg-white/[0.08] hover:text-white/70 transition-all min-w-[36px] min-h-[36px] flex items-center justify-center shrink-0"
+            className="p-2 rounded-full transition-all min-w-[36px] min-h-[36px] flex items-center justify-center shrink-0"
+            style={{ background: 'var(--action-bg)', color: 'var(--action-text)' }}
             disabled={loading}
             aria-label="Refresh articles"
           >
@@ -779,7 +826,7 @@ function App() {
                     primaryGenre={currentArticle.primaryGenre}
                     className="w-full h-full object-cover"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-b from-[#06060a]/30 via-transparent to-[#06060a]" />
+                  <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, var(--gradient-overlay-top), transparent, var(--gradient-overlay-bottom-solid))` }} />
                   <div className="absolute bottom-0 left-0 right-0 px-5 pb-4">
                     <h2
                       onClick={() => toggleBookmark(currentArticle.id)}
@@ -800,29 +847,29 @@ function App() {
                     <span className={`px-2.5 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(currentArticle.primaryGenre)} text-white`}>
                       {currentArticle.primaryGenre}
                     </span>
-                    <span className="text-[10px] uppercase tracking-[0.14em] text-white/30 font-medium">
+                    <span className="text-[10px] uppercase tracking-[0.14em] font-medium" style={{ color: 'var(--text-muted)' }}>
                       {currentArticle.source}
                     </span>
-                    <span className="w-[3px] h-[3px] rounded-full bg-white/15" />
-                    <span className="text-[10px] uppercase tracking-[0.14em] text-white/30 font-medium">
+                    <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'var(--text-faint)' }} />
+                    <span className="text-[10px] uppercase tracking-[0.14em] font-medium" style={{ color: 'var(--text-muted)' }}>
                       {new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </span>
                   </div>
 
-                  <p className="text-white/65 font-light leading-[1.6] tracking-[0.01em]" style={{ fontSize: 'clamp(0.8rem, 0.75rem + 0.5vw, 0.9rem)' }}>
+                  <p className="font-light leading-[1.6] tracking-[0.01em]" style={{ fontSize: 'clamp(0.8rem, 0.75rem + 0.5vw, 0.9rem)', color: 'var(--text-secondary)' }}>
                     {currentArticle.summary}
                   </p>
                 </div>
               </div>
 
               {/* Actions — pinned at bottom, always visible */}
-              <div className="shrink-0 border-t border-white/[0.06] bg-[#06060a]" style={{ padding: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.75rem) clamp(1rem, 0.75rem + 0.5vw, 1.5rem)' }}>
+              <div className="shrink-0" style={{ padding: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.75rem) clamp(1rem, 0.75rem + 0.5vw, 1.5rem)', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-primary)' }}>
                 {renderActions()}
               </div>
             </div>
 
             {/* Carousel dots — mobile */}
-            <div className="md:hidden shrink-0 border-t border-white/[0.06]">
+            <div className="md:hidden shrink-0" style={{ borderTop: '1px solid var(--border-subtle)' }}>
               {renderDots()}
             </div>
 
@@ -832,7 +879,8 @@ function App() {
               <div className="lg:flex-[2] min-w-0 overflow-y-auto scrollbar-hide shrink-0 lg:shrink">
                 <article
                   key={currentArticle?.id}
-                  className="rounded-2xl bg-white/[0.03] shadow-[0_8px_40px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.04)] overflow-hidden animate-crossfade"
+                  className="rounded-2xl overflow-hidden animate-crossfade"
+                  style={{ background: 'var(--card-bg)', boxShadow: 'var(--shadow-featured)' }}
                 >
                   <div className="relative aspect-[16/9] overflow-hidden">
                     <LazyArticleImage
@@ -841,13 +889,13 @@ function App() {
                       primaryGenre={currentArticle.primaryGenre}
                       className="w-full h-full object-cover"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-b from-[#06060a]/30 via-transparent to-[#06060a]" />
+                    <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, var(--gradient-overlay-top), transparent, var(--gradient-overlay-bottom))` }} />
                     <div className="absolute bottom-0 left-0 right-0" style={{ padding: 'clamp(1.25rem, 1rem + 1vw, 2rem)' }}>
                       <div className="flex items-center gap-2.5" style={{ marginBottom: 'clamp(0.625rem, 0.5rem + 0.3vw, 1rem)' }}>
                         <span className={`px-3 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(currentArticle.primaryGenre)} text-white`}>
                           {currentArticle.primaryGenre}
                         </span>
-                        <span className="px-3 py-[3px] rounded-full text-[10px] tracking-[0.08em] text-white/70 bg-white/[0.08] backdrop-blur-md uppercase font-medium">
+                        <span className="px-3 py-[3px] rounded-full text-[10px] tracking-[0.08em] backdrop-blur-md uppercase font-medium" style={{ color: 'var(--text-secondary)', background: 'var(--action-bg)' }}>
                           {currentArticle.source}
                         </span>
                       </div>
@@ -866,14 +914,14 @@ function App() {
 
                   <div style={{ padding: 'clamp(1.25rem, 1rem + 1vw, 2rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.875rem, 0.75rem + 0.4vw, 1.25rem)' }}>
                     {/* Summary — always fully visible */}
-                    <p className="text-white/65 font-light leading-[1.75] tracking-[0.01em] max-w-[64ch]" style={{ fontSize: 'clamp(0.9rem, 0.85rem + 0.25vw, 1.05rem)' }}>
+                    <p className="font-light leading-[1.75] tracking-[0.01em] max-w-[64ch]" style={{ fontSize: 'clamp(0.9rem, 0.85rem + 0.25vw, 1.05rem)', color: 'var(--text-secondary)' }}>
                       {currentArticle.summary}
                     </p>
 
-                    <div className="flex items-center justify-between pt-3 border-t border-white/[0.05]">
-                      <span className="text-[10px] uppercase tracking-[0.16em] text-white/25 font-medium">
+                    <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                      <span className="text-[10px] uppercase tracking-[0.16em] font-medium" style={{ color: 'var(--text-muted)' }}>
                         {new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        <span className="mx-2.5 text-white/10">·</span>
+                        <span className="mx-2.5" style={{ color: 'var(--text-faint)' }}>·</span>
                         {currentArticle.readTime}s read
                       </span>
                       {renderActions()}
@@ -885,8 +933,8 @@ function App() {
               {/* Right: sidebar list on lg+, grid below on md only */}
               <aside className="flex-1 min-w-0 flex flex-col">
                 <div className="flex items-center justify-between" style={{ marginBottom: 'clamp(0.625rem, 0.5rem + 0.3vw, 1rem)' }}>
-                  <h3 className="font-display font-bold uppercase tracking-[0.16em] text-white/35" style={{ fontSize: 'clamp(10px, 9px + 0.2vw, 13px)' }}>More Stories</h3>
-                  <span className="text-white/20 tabular-nums" style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)' }}>{filteredArticles.length} articles</span>
+                  <h3 className="font-display font-bold uppercase tracking-[0.16em]" style={{ fontSize: 'clamp(10px, 9px + 0.2vw, 13px)', color: 'var(--text-quaternary)' }}>More Stories</h3>
+                  <span className="tabular-nums" style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)', color: 'var(--text-muted)' }}>{filteredArticles.length} articles</span>
                 </div>
                 <div className="flex-1 overflow-y-auto scrollbar-hide">
                   <div className="grid grid-cols-2 lg:grid-cols-1" style={{ gap: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.875rem)' }}>
@@ -899,11 +947,11 @@ function App() {
                             setCurrentIndex(idx);
                             trackEvent('desktop_expand', article.id);
                           }}
-                          className={`w-full group card-hover rounded-xl overflow-hidden text-left transition-all duration-250 ${
-                            active
-                              ? 'bg-white/[0.07] ring-1 ring-white/[0.12] shadow-lg'
-                              : 'bg-white/[0.02] hover:bg-white/[0.05] shadow-[0_0_0_1px_rgba(255,255,255,0.03)]'
-                          }`}
+                          className="w-full group card-hover rounded-xl overflow-hidden text-left transition-all duration-250"
+                          style={active
+                            ? { background: 'var(--card-bg-active)', boxShadow: `var(--shadow-card), inset 0 0 0 1px var(--card-border-active)` }
+                            : { background: 'var(--card-bg)', boxShadow: `0 0 0 1px var(--card-border)` }
+                          }
                         >
                           <div className="relative aspect-[2/1] overflow-hidden">
                             <LazyArticleImage
@@ -912,7 +960,7 @@ function App() {
                               primaryGenre={article.primaryGenre}
                               className="w-full h-full object-cover transition-transform duration-600 group-hover:scale-105"
                             />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+                            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0.05), transparent)' }} />
                             <span className={`absolute top-2.5 left-2.5 px-2 py-[2px] rounded-full text-[9px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(article.primaryGenre)} text-white`}>
                               {article.primaryGenre}
                             </span>

@@ -69,7 +69,7 @@ export function LazyArticleImage({ articleId, imageSource, primaryGenre, classNa
   }, [articleId, imageSource]);
 
   if (loading) {
-    return <div className={`${className} bg-white/5 animate-pulse`} />;
+    return <div className={`${className} animate-pulse`} style={{ background: 'var(--skeleton-base)' }} />;
   }
 
   return (

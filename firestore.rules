@@ -180,6 +180,18 @@ service cloud.firestore {
       allow delete: if request.auth != null;
     }
 
+    match /entities/{entityId} {
+      allow read: if true;
+      allow create, update: if request.auth != null ||
+        (request.auth == null &&
+         request.resource.data.keys().hasAll(['name', 'type', 'updated_at']) &&
+         request.resource.data.name is string &&
+         request.resource.data.type is string &&
+         request.resource.data.name.size() > 0 &&
+         request.resource.data.name.size() <= 200);
+      allow delete: if request.auth != null;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
