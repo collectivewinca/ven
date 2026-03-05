@@ -533,45 +533,59 @@ function App() {
 
   // ---------- Action buttons (shared) ----------
 
-  const actionBtnClass = "rounded-xl transition-all duration-200 btn-press flex items-center justify-center p-2 md:p-2.5 lg:p-3 min-w-[36px] min-h-[36px] md:min-w-[40px] md:min-h-[40px] lg:min-w-[44px] lg:min-h-[44px]";
-  const actionIconClass = "w-4 h-4 md:w-[18px] md:h-[18px] lg:w-5 lg:h-5";
+  // Fully fluid sizing — scales continuously with viewport, no breakpoint jumps
+  const fluidBtn: React.CSSProperties = {
+    padding: 'clamp(0.5rem, 0.35rem + 0.5vw, 0.75rem)',
+    minWidth: 'clamp(36px, 32px + 1vw, 48px)',
+    minHeight: 'clamp(36px, 32px + 1vw, 48px)',
+  };
+  const fluidIcon: React.CSSProperties = {
+    width: 'clamp(16px, 14px + 0.5vw, 22px)',
+    height: 'clamp(16px, 14px + 0.5vw, 22px)',
+  };
+  const fluidGap: React.CSSProperties = {
+    gap: 'clamp(0.375rem, 0.25rem + 0.4vw, 0.75rem)',
+  };
 
   const renderActions = () => {
     if (!currentArticle) return null;
     return (
-      <div className="flex items-center gap-1.5 md:gap-2 lg:gap-3">
+      <div className="flex items-center" style={fluidGap}>
         <button
           onClick={() => toggleBookmark(currentArticle.id)}
-          className={`${actionBtnClass} ${
+          className={`rounded-xl transition-all duration-200 btn-press flex items-center justify-center ${
             bookmarks.includes(currentArticle.id)
               ? 'bg-amber-500/20 text-amber-400'
               : 'bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white'
           }`}
+          style={fluidBtn}
           aria-label={bookmarks.includes(currentArticle.id) ? 'Remove bookmark' : 'Add bookmark'}
         >
-          <Bookmark className={`${actionIconClass} ${bookmarks.includes(currentArticle.id) ? 'fill-amber-400' : ''}`} />
+          <Bookmark style={fluidIcon} className={bookmarks.includes(currentArticle.id) ? 'fill-amber-400' : ''} />
         </button>
 
         <button
           onClick={handleShare}
-          className={`${actionBtnClass} bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white`}
+          className="rounded-xl bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white transition-all duration-200 btn-press flex items-center justify-center"
+          style={fluidBtn}
           aria-label="Share article"
         >
-          <Share2 className={actionIconClass} />
+          <Share2 style={fluidIcon} />
         </button>
 
         <button
           onClick={handleListen}
           disabled={audioLoading}
-          className={`${actionBtnClass} bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white disabled:opacity-50`}
+          className="rounded-xl bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white transition-all duration-200 btn-press flex items-center justify-center disabled:opacity-50"
+          style={fluidBtn}
           aria-label="Listen to article"
         >
           {audioLoading ? (
-            <RefreshCw className={`${actionIconClass} animate-spin`} />
+            <RefreshCw style={fluidIcon} className="animate-spin" />
           ) : isAudioPlaying && audioArticleId === currentArticle.id ? (
-            <Pause className={actionIconClass} />
+            <Pause style={fluidIcon} />
           ) : (
-            <Volume2 className={actionIconClass} />
+            <Volume2 style={fluidIcon} />
           )}
         </button>
 
@@ -579,11 +593,12 @@ function App() {
           href={currentArticle.sourceUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className={`${actionBtnClass} bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white`}
+          className="rounded-xl bg-white/[0.08] text-white/60 hover:bg-white/[0.12] hover:text-white transition-all duration-200 flex items-center justify-center"
+          style={fluidBtn}
           onClick={() => trackEvent('external_link', currentArticle.id)}
           aria-label="Open source article"
         >
-          <ExternalLink className={actionIconClass} />
+          <ExternalLink style={fluidIcon} />
         </a>
       </div>
     );
@@ -622,52 +637,61 @@ function App() {
       {/* ─── Header ─── */}
       <header className="shrink-0 z-50 border-b border-white/[0.05] glass">
         {/* Top bar */}
-        <div className="flex items-center justify-between px-4 md:px-6 lg:px-8 py-2.5 md:py-3 lg:py-3.5">
-          <div className="flex items-center gap-2.5 md:gap-3">
-            <div className="w-8 h-8 md:w-9 md:h-9 lg:w-10 lg:h-10 rounded-xl bg-white/[0.07] flex items-center justify-center overflow-hidden border border-white/[0.08]">
-              <img src="/branding/minylogo.png" alt="miny y0" className="w-6 h-6 md:w-7 md:h-7 lg:w-8 lg:h-8 object-contain" />
+        <div className="flex items-center justify-between" style={{ padding: 'clamp(0.5rem, 0.4rem + 0.5vw, 0.875rem) clamp(1rem, 0.75rem + 1vw, 2rem)' }}>
+          <div className="flex items-center" style={{ gap: 'clamp(0.625rem, 0.5rem + 0.3vw, 0.75rem)' }}>
+            <div
+              className="rounded-xl bg-white/[0.07] flex items-center justify-center overflow-hidden border border-white/[0.08]"
+              style={{ width: 'clamp(32px, 28px + 0.8vw, 44px)', height: 'clamp(32px, 28px + 0.8vw, 44px)' }}
+            >
+              <img src="/branding/minylogo.png" alt="miny y0" className="object-contain" style={{ width: 'clamp(24px, 20px + 0.8vw, 36px)', height: 'clamp(24px, 20px + 0.8vw, 36px)' }} />
             </div>
             <div>
-              <h1 className="font-display text-sm md:text-base lg:text-lg font-extrabold tracking-tight leading-none">y0</h1>
-              <p className="text-[8px] md:text-[9px] lg:text-[10px] uppercase tracking-[0.2em] text-white/30 font-medium mt-0.5">Music Intelligence</p>
+              <h1 className="font-display font-extrabold tracking-tight leading-none" style={{ fontSize: 'clamp(0.875rem, 0.75rem + 0.4vw, 1.25rem)' }}>y0</h1>
+              <p className="uppercase tracking-[0.2em] text-white/30 font-medium mt-0.5" style={{ fontSize: 'clamp(8px, 7px + 0.2vw, 11px)' }}>Music Intelligence</p>
             </div>
           </div>
 
           {/* Desktop: genre pills inline */}
-          <div className="hidden md:flex items-center gap-1 lg:gap-1.5">
+          <div className="hidden md:flex items-center" style={{ gap: 'clamp(0.25rem, 0.15rem + 0.2vw, 0.5rem)' }}>
             {genres.map((genre) => (
               <button
                 key={genre.id}
                 onClick={() => setSelectedGenre(genre.id)}
-                className={`px-3 md:px-4 lg:px-5 py-1 md:py-1.5 lg:py-2 rounded-full text-[10px] md:text-[11px] lg:text-xs font-semibold uppercase tracking-[0.08em] transition-all duration-250 ${
+                className={`rounded-full font-semibold uppercase tracking-[0.08em] transition-all duration-250 ${
                   selectedGenre === genre.id
                     ? `bg-gradient-to-r ${genre.gradient} text-white shadow-lg shadow-white/[0.04]`
                     : 'text-white/45 hover:text-white/80 hover:bg-white/[0.06]'
                 }`}
+                style={{
+                  padding: 'clamp(0.25rem, 0.2rem + 0.2vw, 0.5rem) clamp(0.75rem, 0.5rem + 0.5vw, 1.25rem)',
+                  fontSize: 'clamp(10px, 9px + 0.2vw, 13px)',
+                }}
               >
                 {genre.label}
               </button>
             ))}
           </div>
 
-          <div className="flex items-center gap-0.5 md:gap-1">
+          <div className="flex items-center" style={{ gap: 'clamp(0.125rem, 0.1rem + 0.15vw, 0.375rem)' }}>
             <button
               onClick={() => fetchArticles(selectedGenre)}
-              className="hidden md:flex p-2 md:p-2.5 lg:p-3 rounded-full text-white/35 hover:text-white/70 hover:bg-white/[0.06] transition-all min-w-[34px] min-h-[34px] md:min-w-[36px] md:min-h-[36px] lg:min-w-[40px] lg:min-h-[40px] items-center justify-center"
+              className="hidden md:flex rounded-full text-white/35 hover:text-white/70 hover:bg-white/[0.06] transition-all items-center justify-center"
+              style={fluidBtn}
               disabled={loading}
               aria-label="Refresh articles"
             >
-              <RefreshCw className={`w-3.5 h-3.5 md:w-4 md:h-4 lg:w-[18px] lg:h-[18px] ${loading ? 'animate-spin' : ''}`} />
+              <RefreshCw style={fluidIcon} className={loading ? 'animate-spin' : ''} />
             </button>
             <button
               onClick={() => {
                 setShowMenu(false);
                 setShowBookmarks(true);
               }}
-              className="relative p-2 md:p-2.5 lg:p-3 rounded-full hover:bg-white/[0.06] transition-all min-w-[34px] min-h-[34px] md:min-w-[36px] md:min-h-[36px] lg:min-w-[40px] lg:min-h-[40px] flex items-center justify-center"
+              className="relative rounded-full hover:bg-white/[0.06] transition-all flex items-center justify-center"
+              style={fluidBtn}
               aria-label="View bookmarks"
             >
-              <Bookmark className={`w-4 h-4 md:w-[17px] md:h-[17px] lg:w-[19px] lg:h-[19px] transition-all ${
+              <Bookmark style={fluidIcon} className={`transition-all ${
                 bookmarks.length > 0
                   ? 'text-amber-400 fill-amber-400'
                   : 'text-white/35 hover:text-white/70'
@@ -680,10 +704,11 @@ function App() {
             </button>
             <button
               onClick={() => setShowMenu(true)}
-              className="p-2 md:p-2.5 rounded-full hover:bg-white/[0.06] transition-all min-w-[34px] min-h-[34px] md:min-w-[36px] md:min-h-[36px] flex items-center justify-center md:hidden"
+              className="rounded-full hover:bg-white/[0.06] transition-all flex items-center justify-center md:hidden"
+              style={fluidBtn}
               aria-label="Open menu"
             >
-              <Menu className="w-4 h-4 md:w-[17px] md:h-[17px] text-white/35" />
+              <Menu style={fluidIcon} className="text-white/35" />
             </button>
           </div>
         </div>
@@ -720,7 +745,7 @@ function App() {
       <div className="flex-1 overflow-hidden">
         {loading ? (
           /* Loading skeleton */
-          <div className="h-full p-4 md:p-6 md:max-w-[1400px] xl:max-w-[1600px] md:mx-auto overflow-y-auto scrollbar-hide md:flex md:flex-col lg:flex-row md:gap-6 lg:gap-8">
+          <div className="h-full overflow-y-auto scrollbar-hide md:flex md:flex-col lg:flex-row md:mx-auto" style={{ padding: 'clamp(1rem, 0.75rem + 0.75vw, 1.5rem)', maxWidth: 'clamp(700px, 60vw + 200px, 1600px)', gap: 'clamp(1.25rem, 1rem + 0.75vw, 2rem)' }}>
             <div className="lg:flex-[2] min-w-0">
               <ArticleSkeleton variant="featured" />
             </div>
@@ -791,7 +816,7 @@ function App() {
               </div>
 
               {/* Actions — pinned at bottom, always visible */}
-              <div className="shrink-0 px-5 py-2.5 border-t border-white/[0.06] bg-[#06060a]">
+              <div className="shrink-0 border-t border-white/[0.06] bg-[#06060a]" style={{ padding: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.75rem) clamp(1rem, 0.75rem + 0.5vw, 1.5rem)' }}>
                 {renderActions()}
               </div>
             </div>
@@ -802,7 +827,7 @@ function App() {
             </div>
 
             {/* ─── Desktop layout ─── */}
-            <div className="hidden md:flex h-full max-w-[1400px] xl:max-w-[1600px] mx-auto px-6 lg:px-8 py-4 lg:py-6 gap-6 lg:gap-8 flex-col lg:flex-row">
+            <div className="hidden md:flex h-full mx-auto flex-col lg:flex-row" style={{ maxWidth: 'clamp(700px, 60vw + 200px, 1600px)', padding: 'clamp(1rem, 0.75rem + 0.75vw, 1.5rem) clamp(1.25rem, 1rem + 1vw, 2rem)', gap: 'clamp(1.25rem, 1rem + 0.75vw, 2rem)' }}>
               {/* Left: featured article (full width on md, 2/3 on lg+) */}
               <div className="lg:flex-[2] min-w-0 overflow-y-auto scrollbar-hide shrink-0 lg:shrink">
                 <article
@@ -817,8 +842,8 @@ function App() {
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-b from-[#06060a]/30 via-transparent to-[#06060a]" />
-                    <div className="absolute bottom-0 left-0 right-0 p-6 lg:p-8">
-                      <div className="flex items-center gap-2.5 mb-3 lg:mb-4">
+                    <div className="absolute bottom-0 left-0 right-0" style={{ padding: 'clamp(1.25rem, 1rem + 1vw, 2rem)' }}>
+                      <div className="flex items-center gap-2.5" style={{ marginBottom: 'clamp(0.625rem, 0.5rem + 0.3vw, 1rem)' }}>
                         <span className={`px-3 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(currentArticle.primaryGenre)} text-white`}>
                           {currentArticle.primaryGenre}
                         </span>
@@ -839,7 +864,7 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="p-6 lg:p-8 space-y-4 lg:space-y-5">
+                  <div style={{ padding: 'clamp(1.25rem, 1rem + 1vw, 2rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.875rem, 0.75rem + 0.4vw, 1.25rem)' }}>
                     {/* Summary — always fully visible */}
                     <p className="text-white/65 font-light leading-[1.75] tracking-[0.01em] max-w-[64ch]" style={{ fontSize: 'clamp(0.9rem, 0.85rem + 0.25vw, 1.05rem)' }}>
                       {currentArticle.summary}
@@ -859,12 +884,12 @@ function App() {
 
               {/* Right: sidebar list on lg+, grid below on md only */}
               <aside className="flex-1 min-w-0 flex flex-col">
-                <div className="flex items-center justify-between mb-3 lg:mb-4">
-                  <h3 className="font-display text-[11px] font-bold uppercase tracking-[0.16em] text-white/35">More Stories</h3>
-                  <span className="text-[10px] text-white/20 tabular-nums">{filteredArticles.length} articles</span>
+                <div className="flex items-center justify-between" style={{ marginBottom: 'clamp(0.625rem, 0.5rem + 0.3vw, 1rem)' }}>
+                  <h3 className="font-display font-bold uppercase tracking-[0.16em] text-white/35" style={{ fontSize: 'clamp(10px, 9px + 0.2vw, 13px)' }}>More Stories</h3>
+                  <span className="text-white/20 tabular-nums" style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)' }}>{filteredArticles.length} articles</span>
                 </div>
                 <div className="flex-1 overflow-y-auto scrollbar-hide">
-                  <div className="grid grid-cols-2 lg:grid-cols-1 xl:grid-cols-1 gap-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-1" style={{ gap: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.875rem)' }}>
                     {filteredArticles.map((article, idx) => {
                       const active = article.id === currentArticle?.id;
                       return (
@@ -892,9 +917,9 @@ function App() {
                               {article.primaryGenre}
                             </span>
                           </div>
-                          <div className="px-3.5 py-3 space-y-1.5">
-                            <p className="font-display text-[13px] font-bold leading-snug text-white/90 line-clamp-2 tracking-[-0.01em]">{article.title}</p>
-                            <p className="text-[10px] uppercase tracking-[0.12em] text-white/25 font-medium">{article.source}</p>
+                          <div style={{ padding: 'clamp(0.625rem, 0.5rem + 0.3vw, 0.875rem) clamp(0.75rem, 0.6rem + 0.3vw, 1rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.25rem, 0.2rem + 0.15vw, 0.5rem)' }}>
+                            <p className="font-display font-bold leading-snug text-white/90 line-clamp-2 tracking-[-0.01em]" style={{ fontSize: 'clamp(12px, 11px + 0.2vw, 15px)' }}>{article.title}</p>
+                            <p className="uppercase tracking-[0.12em] text-white/25 font-medium" style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)' }}>{article.source}</p>
                           </div>
                         </button>
                       );
