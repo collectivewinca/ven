@@ -717,11 +717,12 @@ function App() {
       <div className="flex-1 overflow-hidden">
         {loading ? (
           /* Loading skeleton */
-          <div className="h-full p-4 md:p-6 md:max-w-[1400px] md:mx-auto md:grid md:grid-cols-3 md:gap-6 overflow-y-auto scrollbar-hide">
-            <div className="md:col-span-2">
+          <div className="h-full p-4 md:p-6 md:max-w-[1400px] xl:max-w-[1600px] md:mx-auto overflow-y-auto scrollbar-hide md:flex md:flex-col lg:flex-row md:gap-6 lg:gap-8">
+            <div className="lg:flex-[2] min-w-0">
               <ArticleSkeleton variant="featured" />
             </div>
-            <div className="hidden md:flex flex-col gap-3 mt-0">
+            <div className="hidden md:grid grid-cols-2 lg:grid-cols-1 gap-3 mt-4 lg:mt-0 flex-1 min-w-0">
+              <ArticleSkeleton variant="compact" />
               <ArticleSkeleton variant="compact" />
               <ArticleSkeleton variant="compact" />
               <ArticleSkeleton variant="compact" />
@@ -754,7 +755,8 @@ function App() {
                   <div className="absolute bottom-0 left-0 right-0 px-5 pb-4">
                     <h2
                       onClick={() => toggleBookmark(currentArticle.id)}
-                      className="font-display text-[1.5rem] font-extrabold tracking-[-0.02em] leading-[1.12] text-white cursor-pointer select-none drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]"
+                      className="font-display font-extrabold tracking-[-0.02em] leading-[1.12] text-white cursor-pointer select-none drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]"
+                      style={{ fontSize: 'clamp(1.25rem, 1rem + 2vw, 1.75rem)' }}
                     >
                       {currentArticle.title}
                       {bookmarks.includes(currentArticle.id) && (
@@ -779,7 +781,7 @@ function App() {
                     </span>
                   </div>
 
-                  <p className="text-white/65 text-[13px] font-light leading-[1.6] tracking-[0.01em]">
+                  <p className="text-white/65 font-light leading-[1.6] tracking-[0.01em]" style={{ fontSize: 'clamp(0.8rem, 0.75rem + 0.5vw, 0.9rem)' }}>
                     {currentArticle.summary}
                   </p>
                 </div>
@@ -797,9 +799,9 @@ function App() {
             </div>
 
             {/* ─── Desktop layout ─── */}
-            <div className="hidden md:flex h-full max-w-[1400px] mx-auto px-8 py-6 gap-8">
-              {/* Left: featured article (2/3) */}
-              <div className="flex-[2] min-w-0 overflow-y-auto scrollbar-hide">
+            <div className="hidden md:flex h-full max-w-[1400px] xl:max-w-[1600px] mx-auto px-6 lg:px-8 py-4 lg:py-6 gap-6 lg:gap-8 flex-col lg:flex-row">
+              {/* Left: featured article (full width on md, 2/3 on lg+) */}
+              <div className="lg:flex-[2] min-w-0 overflow-y-auto scrollbar-hide shrink-0 lg:shrink">
                 <article
                   key={currentArticle?.id}
                   className="rounded-2xl bg-white/[0.03] shadow-[0_8px_40px_rgba(0,0,0,0.3),0_0_0_1px_rgba(255,255,255,0.04)] overflow-hidden animate-crossfade"
@@ -812,8 +814,8 @@ function App() {
                       className="w-full h-full object-cover"
                     />
                     <div className="absolute inset-0 bg-gradient-to-b from-[#06060a]/30 via-transparent to-[#06060a]" />
-                    <div className="absolute bottom-0 left-0 right-0 p-8">
-                      <div className="flex items-center gap-2.5 mb-4">
+                    <div className="absolute bottom-0 left-0 right-0 p-6 lg:p-8">
+                      <div className="flex items-center gap-2.5 mb-3 lg:mb-4">
                         <span className={`px-3 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(currentArticle.primaryGenre)} text-white`}>
                           {currentArticle.primaryGenre}
                         </span>
@@ -823,7 +825,8 @@ function App() {
                       </div>
                       <h2
                         onClick={() => toggleBookmark(currentArticle.id)}
-                        className="font-display text-[2.1rem] font-extrabold tracking-[-0.025em] leading-[1.08] text-white cursor-pointer select-none hover:text-white/90 transition-colors drop-shadow-[0_2px_16px_rgba(0,0,0,0.4)]"
+                        className="font-display font-extrabold tracking-[-0.025em] leading-[1.08] text-white cursor-pointer select-none hover:text-white/90 transition-colors drop-shadow-[0_2px_16px_rgba(0,0,0,0.4)]"
+                        style={{ fontSize: 'clamp(1.5rem, 1.2rem + 1.5vw, 2.5rem)' }}
                       >
                         {currentArticle.title}
                         {bookmarks.includes(currentArticle.id) && (
@@ -833,9 +836,9 @@ function App() {
                     </div>
                   </div>
 
-                  <div className="p-8 space-y-5">
+                  <div className="p-6 lg:p-8 space-y-4 lg:space-y-5">
                     {/* Summary — always fully visible */}
-                    <p className="text-white/65 text-[1.05rem] font-light leading-[1.75] tracking-[0.01em] max-w-[64ch]">
+                    <p className="text-white/65 font-light leading-[1.75] tracking-[0.01em] max-w-[64ch]" style={{ fontSize: 'clamp(0.9rem, 0.85rem + 0.25vw, 1.05rem)' }}>
                       {currentArticle.summary}
                     </p>
 
@@ -851,47 +854,49 @@ function App() {
                 </article>
               </div>
 
-              {/* Right: sidebar (1/3) */}
+              {/* Right: sidebar list on lg+, grid below on md only */}
               <aside className="flex-1 min-w-0 flex flex-col">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center justify-between mb-3 lg:mb-4">
                   <h3 className="font-display text-[11px] font-bold uppercase tracking-[0.16em] text-white/35">More Stories</h3>
                   <span className="text-[10px] text-white/20 tabular-nums">{filteredArticles.length} articles</span>
                 </div>
-                <div className="flex-1 overflow-y-auto scrollbar-hide space-y-3">
-                  {filteredArticles.map((article, idx) => {
-                    const active = article.id === currentArticle?.id;
-                    return (
-                      <button
-                        key={article.id}
-                        onClick={() => {
-                          setCurrentIndex(idx);
-                          trackEvent('desktop_expand', article.id);
-                        }}
-                        className={`w-full group rounded-xl overflow-hidden text-left transition-all duration-250 ${
-                          active
-                            ? 'bg-white/[0.07] ring-1 ring-white/[0.12] shadow-lg'
-                            : 'bg-white/[0.02] hover:bg-white/[0.05] shadow-[0_0_0_1px_rgba(255,255,255,0.03)]'
-                        }`}
-                      >
-                        <div className="relative aspect-[2/1] overflow-hidden">
-                          <LazyArticleImage
-                            articleId={article.id}
-                            imageSource={article.imageSource}
-                            primaryGenre={article.primaryGenre}
-                            className="w-full h-full object-cover transition-transform duration-600 group-hover:scale-105"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
-                          <span className={`absolute top-2.5 left-2.5 px-2 py-[2px] rounded-full text-[9px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(article.primaryGenre)} text-white`}>
-                            {article.primaryGenre}
-                          </span>
-                        </div>
-                        <div className="px-3.5 py-3 space-y-1.5">
-                          <p className="font-display text-[13px] font-bold leading-snug text-white/90 line-clamp-2 tracking-[-0.01em]">{article.title}</p>
-                          <p className="text-[10px] uppercase tracking-[0.12em] text-white/25 font-medium">{article.source}</p>
-                        </div>
-                      </button>
-                    );
-                  })}
+                <div className="flex-1 overflow-y-auto scrollbar-hide">
+                  <div className="grid grid-cols-2 lg:grid-cols-1 xl:grid-cols-1 gap-3">
+                    {filteredArticles.map((article, idx) => {
+                      const active = article.id === currentArticle?.id;
+                      return (
+                        <button
+                          key={article.id}
+                          onClick={() => {
+                            setCurrentIndex(idx);
+                            trackEvent('desktop_expand', article.id);
+                          }}
+                          className={`w-full group card-hover rounded-xl overflow-hidden text-left transition-all duration-250 ${
+                            active
+                              ? 'bg-white/[0.07] ring-1 ring-white/[0.12] shadow-lg'
+                              : 'bg-white/[0.02] hover:bg-white/[0.05] shadow-[0_0_0_1px_rgba(255,255,255,0.03)]'
+                          }`}
+                        >
+                          <div className="relative aspect-[2/1] overflow-hidden">
+                            <LazyArticleImage
+                              articleId={article.id}
+                              imageSource={article.imageSource}
+                              primaryGenre={article.primaryGenre}
+                              className="w-full h-full object-cover transition-transform duration-600 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-transparent" />
+                            <span className={`absolute top-2.5 left-2.5 px-2 py-[2px] rounded-full text-[9px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(article.primaryGenre)} text-white`}>
+                              {article.primaryGenre}
+                            </span>
+                          </div>
+                          <div className="px-3.5 py-3 space-y-1.5">
+                            <p className="font-display text-[13px] font-bold leading-snug text-white/90 line-clamp-2 tracking-[-0.01em]">{article.title}</p>
+                            <p className="text-[10px] uppercase tracking-[0.12em] text-white/25 font-medium">{article.source}</p>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               </aside>
             </div>
