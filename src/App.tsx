@@ -732,7 +732,7 @@ function App() {
           <>
             <div
               ref={containerRef}
-              className="h-full md:hidden overflow-y-auto overflow-x-hidden scrollbar-hide relative"
+              className="h-full md:hidden flex flex-col overflow-hidden relative"
               onTouchStart={onTouchStart}
               onTouchMove={onTouchMove}
               onTouchEnd={onTouchEnd}
@@ -740,23 +740,21 @@ function App() {
               <div
                 ref={contentRef}
                 key={currentArticle?.id}
-                className={`min-h-full flex flex-col animate-crossfade ${isDragging ? 'cursor-grabbing' : ''}`}
+                className={`flex-1 flex flex-col overflow-y-auto overflow-x-hidden scrollbar-hide animate-crossfade ${isDragging ? 'cursor-grabbing' : ''}`}
               >
                 {/* Hero image — full bleed, adapts to screen */}
-                <div className="relative h-[38vh] shrink-0 overflow-hidden">
+                <div className="relative h-[36vh] shrink-0 overflow-hidden">
                   <LazyArticleImage
                     articleId={currentArticle.id}
                     imageSource={currentArticle.imageSource}
                     primaryGenre={currentArticle.primaryGenre}
                     className="w-full h-full object-cover"
                   />
-                  {/* Stronger 3-stop gradient for text legibility */}
                   <div className="absolute inset-0 bg-gradient-to-b from-[#06060a]/30 via-transparent to-[#06060a]" />
-                  {/* Title overlay at bottom of image */}
-                  <div className="absolute bottom-0 left-0 right-0 px-5 pb-5">
+                  <div className="absolute bottom-0 left-0 right-0 px-5 pb-4">
                     <h2
                       onClick={() => toggleBookmark(currentArticle.id)}
-                      className="font-display text-[1.65rem] font-extrabold tracking-[-0.02em] leading-[1.12] text-white cursor-pointer select-none drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]"
+                      className="font-display text-[1.5rem] font-extrabold tracking-[-0.02em] leading-[1.12] text-white cursor-pointer select-none drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]"
                     >
                       {currentArticle.title}
                       {bookmarks.includes(currentArticle.id) && (
@@ -767,8 +765,7 @@ function App() {
                 </div>
 
                 {/* Below the fold */}
-                <div className="flex-1 px-5 pt-4 pb-2 flex flex-col gap-3">
-                  {/* Source badge + genre + date */}
+                <div className="px-5 pt-3 pb-2 flex flex-col gap-2">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={`px-2.5 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(currentArticle.primaryGenre)} text-white`}>
                       {currentArticle.primaryGenre}
@@ -782,16 +779,15 @@ function App() {
                     </span>
                   </div>
 
-                  {/* Summary — always fully visible, no clamp */}
-                  <p className="text-white/65 text-[14px] font-light leading-[1.65] tracking-[0.01em]">
+                  <p className="text-white/65 text-[13px] font-light leading-[1.6] tracking-[0.01em]">
                     {currentArticle.summary}
                   </p>
-
-                  {/* Actions */}
-                  <div className="mt-auto">
-                    {renderActions()}
-                  </div>
                 </div>
+              </div>
+
+              {/* Actions — pinned at bottom, always visible */}
+              <div className="shrink-0 px-5 py-2.5 border-t border-white/[0.06] bg-[#06060a]">
+                {renderActions()}
               </div>
             </div>
 
