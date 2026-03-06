@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Trends | MINY y0</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #fafaf9;
+            --surface: #ffffff;
+            --surface-elevated: #f5f5f4;
+            --border: #e7e5e4;
+            --text: #1c1917;
+            --text-dim: #78716c;
+            --accent: #ea580c;
+            --accent-light: #fff7ed;
+            --secondary: #0891b2;
+            --tertiary: #9333ea;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 48px 24px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .logo {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--accent);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+        }
+
+        h1 {
+            font-size: clamp(2rem, 6vw, 2.75rem);
+            font-weight: 700;
+            letter-spacing: -0.03em;
+            margin-bottom: 12px;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            color: var(--text-dim);
+        }
+
+        .nav {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-bottom: 40px;
+            padding-bottom: 24px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .nav a {
+            color: var(--text-dim);
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .nav a:hover { color: var(--accent); }
+        .nav a.active { color: var(--text); font-weight: 500; }
+
+        /* HIGHLIGHTS */
+        .highlight {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            margin-bottom: 32px;
+            transition: all 0.3s ease;
+        }
+
+        .highlight:hover {
+            border-color: var(--accent);
+            box-shadow: 0 8px 32px rgba(234, 88, 12, 0.08);
+        }
+
+        .highlight-tag {
+            display: inline-block;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.65rem;
+            padding: 4px 10px;
+            background: var(--accent-light);
+            color: var(--accent);
+            border-radius: 4px;
+            margin-bottom: 16px;
+            font-weight: 700;
+        }
+
+        .highlight-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            line-height: 1.3;
+        }
+
+        .highlight-meta {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            margin-bottom: 16px;
+        }
+
+        .highlight-desc {
+            color: var(--text-dim);
+            font-size: 1rem;
+            margin-bottom: 20px;
+            line-height: 1.7;
+        }
+
+        .highlight-stats {
+            display: flex;
+            gap: 24px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+
+        .stat {
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .stat-label {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+        }
+
+        .highlight-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--accent);
+            color: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.9rem;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .highlight-link:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
+        }
+
+        .highlight-link::after {
+            content: '→';
+        }
+
+        /* SECTIONS */
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .section-title span {
+            font-size: 1.25rem;
+        }
+
+        .mini-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 12px;
+            transition: all 0.2s ease;
+        }
+
+        .mini-card:hover {
+            border-color: var(--secondary);
+        }
+
+        .mini-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .mini-card-title {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        .mini-card-meta {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.65rem;
+            color: var(--text-dim);
+        }
+
+        .mini-card-desc {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+        }
+
+        .mini-card-link {
+            display: inline-block;
+            margin-top: 10px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--secondary);
+            text-decoration: none;
+        }
+
+        .mini-card-link:hover { text-decoration: underline; }
+
+        /* CTA */
+        .cta {
+            background: var(--accent-light);
+            border: 1px solid var(--accent);
+            border-radius: 16px;
+            padding: 32px;
+            text-align: center;
+            margin-top: 48px;
+        }
+
+        .cta h3 {
+            font-size: 1.25rem;
+            margin-bottom: 8px;
+        }
+
+        .cta p {
+            color: var(--text-dim);
+            margin-bottom: 20px;
+        }
+
+        .cta-link {
+            display: inline-block;
+            background: var(--accent);
+            color: white;
+            padding: 14px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .cta-link:hover {
+            background: #c2410c;
+        }
+
+        .timestamp {
+            text-align: center;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.7rem;
+            color: var(--text-dim);
+            margin-top: 40px;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 60px;
+            padding-top: 24px;
+            border-top: 1px solid var(--border);
+            color: var(--text-dim);
+            font-size: 0.8rem;
+        }
+
+        @media (max-width: 600px) {
+            .highlight-stats { flex-wrap: wrap; gap: 16px; }
+            .nav { flex-direction: column; gap: 12px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <p class="logo">MINY y0 Residency</p>
+            <h1>Music Trends</h1>
+            <p class="subtitle">What's trending in music communities worldwide</p>
+        </header>
+
+        <nav class="nav">
+            <a href="#" class="active">Highlights</a>
+            <a href="#quick">Quick Takes</a>
+            <a href="#community">Community</a>
+        </nav>
+
+        <!-- HIGHLIGHT 1 -->
+        <article class="highlight">
+            <span class="highlight-tag">BREAKING NEWS</span>
+            <h2 class="highlight-title">Bad Bunny Breaks Super Bowl Viewership Record</h2>
+            <p class="highlight-meta">r/Reggaeton • March 2026</p>
+            <p class="highlight-desc">
+                Bad Bunny has officially set the global viewership record for the most-watched Super Bowl Halftime show performance of all-time. This marks a historic moment for Latin music and reggaeton's dominance in mainstream entertainment. The Puerto Rican superstar continues to bridge cultural gaps, having previously thanked Chile for being one of the first countries to embrace reggaeton in the 2000s.
+            </p>
+            <div class="highlight-stats">
+                <div class="stat">
+                    <div class="stat-value">#1</div>
+                    <div class="stat-label">All-Time</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">931</div>
+                    <div class="stat-label">Reddit Votes</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">Global</div>
+                    <div class="stat-label">Impact</div>
+                </div>
+            </div>
+            <a href="https://www.reddit.com/r/Reggaeton/comments/1rjyq9d/officially_bad_bunny_sets_global_viewership/" target="_blank" class="highlight-link">View Discussion</a>
+        </article>
+
+        <!-- HIGHLIGHT 2 -->
+        <article class="highlight">
+            <span class="highlight-tag">INDUSTRY TREND</span>
+            <h2 class="highlight-title">AI-Generated Music Flooding Spotify: City Pop Crisis</h2>
+            <p class="highlight-meta">r/citypop • March 2026</p>
+            <p class="highlight-desc">
+                A growing concern in the city pop community: AI-generated music is flooding Spotify searches, making it difficult for listeners to find authentic artists. The discussion highlights how AI "slop" is deceiving newcomers to the genre, while real city pop gems go undiscovered. This mirrors a broader industry challenge about platform authenticity and the need for better curation.
+            </p>
+            <div class="highlight-stats">
+                <div class="stat">
+                    <div class="stat-value">Hot</div>
+                    <div class="stat-label">Topic</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">13+</div>
+                    <div class="stat-label">Comments</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">Industry</div>
+                    <div class="stat-label">Impact</div>
+                </div>
+            </div>
+            <a href="https://www.reddit.com/r/citypop/comments/1rkxc51/will_spotify_be_more_unrealible_and_inconvenient/" target="_blank" class="highlight-link">View Discussion</a>
+        </article>
+
+        <!-- HIGHLIGHT 3 -->
+        <article class="highlight">
+            <span class="highlight-tag">ARTIST SPOTLIGHT</span>
+            <h2 class="highlight-title">Mexico City Producer Drops Modern Sensual Bachata</h2>
+            <p class="highlight-meta">r/Bachata • March 2026</p>
+            <p class="highlight-desc">
+                A producer from Mexico City has released a modern sensual bachata track, creating something "intimate and emotional, but still strong enough to work well on a dance floor." This directly aligns with MINY y0's Mexico City residency — showcasing the vibrant music scene in the city. The artist is seeking feedback from dancers and DJs, demonstrating the collaborative nature of the Latin music community.
+            </p>
+            <div class="highlight-stats">
+                <div class="stat">
+                    <div class="stat-value">MXC</div>
+                    <div class="stat-label">Origin</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">13</div>
+                    <div class="stat-label">Reddit Votes</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value">Relevant</div>
+                    <div class="stat-label">MINY y0</div>
+                </div>
+            </div>
+            <a href="https://www.reddit.com/r/Bachata/comments/1riih1y/tried_producing_a_modern_sensual_bachata_would/" target="_blank" class="highlight-link">Listen on Spotify</a>
+        </article>
+
+        <!-- QUICK TAKES -->
+        <section id="quick" class="section">
+            <h2 class="section-title"><span>⚡</span> Quick Takes</h2>
+
+            <div class="mini-card">
+                <div class="mini-card-header">
+                    <div class="mini-card-title">City Pop vs Future Funk — Chicago Event</div>
+                    <div class="mini-card-meta">236 votes</div>
+                </div>
+                <p class="mini-card-desc">Japanese Culture Center hosts City Pop vs Future Funk night (April 10). Features Van Paugam & TIARA. Great event example for MINY y0 cities.</p>
+                <a href="https://www.reddit.com/r/citypop/comments/1rjyx8r/city_pop_vs_future_funk_chicago_april_10th_feat/" target="_blank" class="mini-card-link">View Event →</a>
+            </div>
+
+            <div class="mini-card">
+                <div class="mini-card-header">
+                    <div class="mini-card-title">Yuki Saitō — Shōwa 60 (1985)</div>
+                    <div class="mini-card-meta">343 votes</div>
+                </div>
+                <p class="mini-card-desc">Classic city pop track trending strongly. Shows enduring appeal of 80s Japanese sound.</p>
+                <a href="https://www.reddit.com/r/citypop/comments/1rknqo7/yuki_sait%C5%8D_sh%C5%8Dwa_60_1985/" target="_blank" class="mini-card-link">View →</a>
+            </div>
+
+            <div class="mini-card">
+                <div class="mini-card-header">
+                    <div class="mini-card-title">Ivy Queen — La Liga Femenina</div>
+                    <div class="mini-card-meta">4 votes</div>
+                </div>
+                <p class="mini-card-desc">First exclusively female collaborative album in reggaeton history. Breaking barriers in Latin music.</p>
+                <a href="https://www.reddit.com/r/Reggaeton/comments/1rkrc3l/ivy_queen_se_une_a_la_liga_femenina_el_primer/" target="_blank" class="mini-card-link">View →</a>
+            </div>
+
+            <div class="mini-card">
+                <div class="mini-card-header">
+                    <div class="mini-card-title">Hidden Gem: Kunio Muramatsu — Green Water</div>
+                    <div class="mini-card-meta">9 votes</div>
+                </div>
+                <p class="mini-card-desc">Underground city pop album (1983) getting rediscovered. "One of the best city pop albums I have heard, no skips."</p>
+                <a href="https://www.reddit.com/r/citypop/comments/1rlcnln/why_is_kunio_muramatsu_so_underrated/" target="_blank" class="mini-card-link">View →</a>
+            </div>
+        </section>
+
+        <!-- COMMUNITY -->
+        <section id="community" class="section">
+            <h2 class="section-title"><span>🌐</span> Community Highlights</h2>
+
+            <div class="mini-card">
+                <div class="mini-card-header">
+                    <div class="mini-card-title">Underground Reggaeton Artists Thread</div>
+                    <div class="mini-card-meta">r/Reggaeton</div>
+                </div>
+                <p class="mini-card-desc">Monthly thread for discovering up-and-coming reggaeton artists. Great for finding emerging talent across LATAM.</p>
+                <a href="https://www.reddit.com/r/Reggaeton/comments/1rhrmm8/monthly/" target="_blank" class="mini-card-link">Discover Artists →</a>
+            </div>
+
+            <div class="mini-card">
+                <div class="mini-card-header">
+                    <div class="mini-card-title">Artist Dropped from AWAL — Rereleasing on YouTube</div>
+                    <div class="mini-card-meta">r/bedroompop</div>
+                </div>
+                <p class="mini-card-desc">"I recently got dropped from AWAL, so I've decided to rerelease my EP that I recorded and produced at home." Relatable indie artist story.</p>
+                <a href="https://www.reddit.com/r/bedroompop/comments/1racr6c/wheres_piers_one_pt_1_ep/" target="_blank" class="mini-card-link">View Story →</a>
+            </div>
+
+            <div class="mini-card">
+                <div class="mini-card-header">
+                    <div class="mini-card-title">Free Mix Feedback Thread</div>
+                    <div class="mini-card-meta">r/bedroompop</div>
+                </div>
+                <p class="mini-card-desc">Producer offering free mixing feedback. "Drop your music links and I'll tell you what can be improved." Active community engagement.</p>
+                <a href="https://www.reddit.com/r/bedroompop/comments/1rabsa7/giving_out_feedback_on_mixes/" target="_blank" class="mini-card-link">Join Discussion →</a>
+            </div>
+
+            <div class="mini-card">
+                <div class="mini-card-header">
+                    <div class="mini-card-title">Complete Bachata Artists & DJs List</div>
+                    <div class="mini-card-meta">r/Bachata • 44 votes</div>
+                </div>
+                <p class="mini-card-desc">100+ modern artists, traditional artists, and DJs listed. Comprehensive resource for Dominican music scene.</p>
+                <a href="https://www.reddit.com/r/Bachata/comments/vh8iwg/bachata_artists_and_djs/" target="_blank" class="mini-card-link">View Resource →</a>
+            </div>
+        </section>
+
+        <!-- CTA -->
+        <div class="cta">
+            <h3>Ready to launch your music career?</h3>
+            <p>Join MINY y0 residency in 13 cities worldwide. Create your track, grow your audience.</p>
+            <a href="https://y0.minyvinyl.com" target="_blank" class="cta-link">Apply Now →</a>
+        </div>
+
+        <p class="timestamp" id="update-time">Last updated: March 05, 2026 at 21:36
+
+        <footer>
+            <p>Curated for MINY y0 Residency Artists</p>
+        </footer>
+    </div>
+</body>
+</html>

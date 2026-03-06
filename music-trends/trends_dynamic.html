@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MINY y0 Music Trends Monitor</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #4a6fa5;
+            --secondary: #166088;
+            --accent: #ff6b6b;
+            --light: #f8f9fa;
+            --dark: #343a40;
+            --gray: #6c757d;
+            --success: #28a745;
+            --warning: #ffc107;
+            --info: #17a2b8;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        header {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            text-align: center;
+            border-left: 5px solid var(--primary);
+        }
+        
+        .logo {
+            font-size: 2.5rem;
+            color: var(--primary);
+            margin-bottom: 10px;
+        }
+        
+        h1 {
+            color: var(--secondary);
+            margin-bottom: 10px;
+            font-size: 2.2rem;
+        }
+        
+        .subtitle {
+            color: var(--gray);
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+        
+        .timestamp {
+            background: var(--light);
+            padding: 10px 20px;
+            border-radius: 25px;
+            display: inline-block;
+            font-size: 0.9rem;
+            color: var(--gray);
+            border: 1px solid #e9ecef;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .stat {
+            background: white;
+            padding: 15px 25px;
+            border-radius: 10px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+            text-align: center;
+            min-width: 150px;
+            border-top: 3px solid var(--primary);
+        }
+        
+        .stat-number {
+            font-size: 2rem;
+            font-weight: bold;
+            color: var(--primary);
+            margin-bottom: 5px;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: var(--gray);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .section {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+        
+        .section-title {
+            color: var(--secondary);
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid var(--light);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .section-title i {
+            color: var(--primary);
+        }
+        
+        .trending-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .trend-card {
+            background: var(--light);
+            border-radius: 10px;
+            padding: 20px;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border-left: 4px solid var(--accent);
+        }
+        
+        .trend-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(0,0,0,0.1);
+        }
+        
+        .trend-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--dark);
+        }
+        
+        .trend-meta {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+        
+        .trend-votes {
+            color: var(--success);
+            font-weight: bold;
+        }
+        
+        .trend-comments {
+            color: var(--info);
+        }
+        
+        .trend-subreddit {
+            background: var(--primary);
+            color: white;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        
+        .region-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        
+        .region-card {
+            background: var(--light);
+            border-radius: 10px;
+            padding: 25px;
+            border-top: 4px solid var(--secondary);
+        }
+        
+        .region-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .region-name {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: var(--secondary);
+        }
+        
+        .post-list {
+            list-style: none;
+        }
+        
+        .post-item {
+            padding: 12px 0;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .post-item:last-child {
+            border-bottom: none;
+        }
+        
+        .post-title {
+            font-size: 1rem;
+            margin-bottom: 5px;
+            color: var(--dark);
+        }
+        
+        .post-meta {
+            display: flex;
+            gap: 15px;
+            font-size: 0.85rem;
+            color: var(--gray);
+        }
+        
+        .cta-section {
+            text-align: center;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            border-radius: 15px;
+            padding: 40px;
+            margin-top: 40px;
+        }
+        
+        .cta-title {
+            font-size: 2rem;
+            margin-bottom: 15px;
+        }
+        
+        .cta-button {
+            display: inline-block;
+            background: white;
+            color: var(--primary);
+            padding: 15px 40px;
+            border-radius: 30px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-top: 20px;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+            background: var(--light);
+        }
+        
+        footer {
+            text-align: center;
+            padding: 30px;
+            color: var(--gray);
+            font-size: 0.9rem;
+            margin-top: 40px;
+        }
+        
+        .automation-badge {
+            background: var(--success);
+            color: white;
+            padding: 5px 15px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
+        @media (max-width: 768px) {
+            .trending-grid, .region-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .stats {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .stat {
+                width: 100%;
+                max-width: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">
+                <i class="fas fa-music"></i>
+            </div>
+            <h1>MINY y0 Music Trends Monitor</h1>
+            <p class="subtitle">Tracking music trends across 13 cities, 6 continents for MINY y0 residency artists</p>
+            <div class="timestamp">
+                <i class="fas fa-sync-alt"></i> Last updated: 2026-03-05 21:49:11
+            </div>
+            
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-number">26</div>
+                    <div class="stat-label">Subreddits</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">615</div>
+                    <div class="stat-label">Total Posts</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">10</div>
+                    <div class="stat-label">Trending Topics</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-number">48h</div>
+                    <div class="stat-label">Update Cycle</div>
+                </div>
+            </div>
+        </header>
+        
+        <section class="section">
+            <h2 class="section-title">
+                <i class="fas fa-fire"></i> Top Trending Topics
+            </h2>
+            <p>Most discussed music topics across all monitored communities</p>
+            
+            <div class="trending-grid">
+
+                <div class="trend-card">
+                    <div class="trend-subreddit">r/jazz</div>
+                    <h3 class="trend-title">just finished reading this book now I can’t stop saying motherfucker</h3>
+                    <div class="trend-meta">
+                        <span class="trend-votes"><i class="fas fa-arrow-up"></i> 1037 votes</span>
+                        <span class="trend-comments"><i class="fas fa-comment"></i> 120 comments</span>
+                    </div>
+                    <p>this book is a motherfucker</p>
+                    <a href="https://www.reddit.com/r/Jazz/comments/1rln9ip/just_finished_reading_this_book_now_i_cant_stop/" target="_blank" style="color: var(--primary); font-size: 0.9rem; display: inline-block; margin-top: 10px;">
+                        <i class="fas fa-external-link-alt"></i> View on Reddit
+                    </a>
+                </div>
+
+                <div class="trend-card">
+                    <div class="trend-subreddit">r/kpop</div>
+                    <h3 class="trend-title">Wendy (Red Velvet) - Wendy threw the first pitch for Team Korea ahead of its win against Team Czechia (260305)</h3>
+                    <div class="trend-meta">
+                        <span class="trend-votes"><i class="fas fa-arrow-up"></i> 749 votes</span>
+                        <span class="trend-comments"><i class="fas fa-comment"></i> 13 comments</span>
+                    </div>
+                    
+                    <a href="https://www.reddit.com/r/kpop/comments/1rli4dx/wendy_red_velvet_wendy_threw_the_first_pitch_for/" target="_blank" style="color: var(--primary); font-size: 0.9rem; display: inline-block; margin-top: 10px;">
+                        <i class="fas fa-external-link-alt"></i> View on Reddit
+                    </a>
+                </div>
+
+                <div class="trend-card">
+                    <div class="trend-subreddit">r/rnb</div>
+                    <h3 class="trend-title">Luther Vandross - Never Too Much (Luther Had Everyone in the Record Store Spontaneously Dancing 😂)</h3>
+                    <div class="trend-meta">
+                        <span class="trend-votes"><i class="fas fa-arrow-up"></i> 565 votes</span>
+                        <span class="trend-comments"><i class="fas fa-comment"></i> 43 comments</span>
+                    </div>
+                    <p>That look when someone puts on your jam.  Just good vibes ☺️</p>
+                    <a href="https://www.reddit.com/r/rnb/comments/1rlk58x/luther_vandross_never_too_much_luther_had/" target="_blank" style="color: var(--primary); font-size: 0.9rem; display: inline-block; margin-top: 10px;">
+                        <i class="fas fa-external-link-alt"></i> View on Reddit
+                    </a>
+                </div>
+
+                <div class="trend-card">
+                    <div class="trend-subreddit">r/hiphopheads</div>
+                    <h3 class="trend-title">[FRESH VIDEO] Baby Keem - Good Flirts (Official Video) ft. Kendrick Lamar, Momo Boyd</h3>
+                    <div class="trend-meta">
+                        <span class="trend-votes"><i class="fas fa-arrow-up"></i> 514 votes</span>
+                        <span class="trend-comments"><i class="fas fa-comment"></i> 107 comments</span>
+                    </div>
+                    
+                    <a href="https://www.reddit.com/r/hiphopheads/comments/1rllfhp/fresh_video_baby_keem_good_flirts_official_video/" target="_blank" style="color: var(--primary); font-size: 0.9rem; display: inline-block; margin-top: 10px;">
+                        <i class="fas fa-external-link-alt"></i> View on Reddit
+                    </a>
+                </div>
+
+                <div class="trend-card">
+                    <div class="trend-subreddit">r/indieheads</div>
+                    <h3 class="trend-title">How The National Became The National: Eight Years, Five Friends, and One Near-Disaster of an Album</h3>
+                    <div class="trend-meta">
+                        <span class="trend-votes"><i class="fas fa-arrow-up"></i> 176 votes</span>
+                        <span class="trend-comments"><i class="fas fa-comment"></i> 70 comments</span>
+                    </div>
+                    
+                    <a href="https://www.reddit.com/r/indieheads/comments/1rlw8jm/how_the_national_became_the_national_eight_years/" target="_blank" style="color: var(--primary); font-size: 0.9rem; display: inline-block; margin-top: 10px;">
+                        <i class="fas fa-external-link-alt"></i> View on Reddit
+                    </a>
+                </div>
+
+                <div class="trend-card">
+                    <div class="trend-subreddit">r/rnb</div>
+                    <h3 class="trend-title">Does anyone else know this duo??</h3>
+                    <div class="trend-meta">
+                        <span class="trend-votes"><i class="fas fa-arrow-up"></i> 174 votes</span>
+                        <span class="trend-comments"><i class="fas fa-comment"></i> 39 comments</span>
+                    </div>
+                    
+                    <a href="https://www.reddit.com/r/rnb/comments/1rlqsxq/does_anyone_else_know_this_duo/" target="_blank" style="color: var(--primary); font-size: 0.9rem; display: inline-block; margin-top: 10px;">
+                        <i class="fas fa-external-link-alt"></i> View on Reddit
+                    </a>
+                </div>
+
+            </div>
+        </section>
+        
+        <section class="section">
+            <h2 class="section-title">
+                <i class="fas fa-globe-americas"></i> Regional Breakdown
+            </h2>
+            <p>Music trends by region relevant to MINY y0 cities</p>
+            
+            <div class="region-grid">
+
+                <div class="region-card">
+                    <div class="region-header">
+                        <h3 class="region-name">Latin America</h3>
+                        <span style="color: var(--gray); font-size: 0.9rem;">
+                            4 subreddits
+                        </span>
+                    </div>
+                    <ul class="post-list">
+
+                        <li class="post-item">
+                            <div class="post-title">Officially, Bad Bunny sets global viewership record for most-watched Super Bowl Halftime show performance of all-time</div>
+                            <div class="post-meta">
+                                <span>r/reggaeton</span>
+                                <span><i class="fas fa-arrow-up"></i> 944</span>
+                                <span><i class="fas fa-comment"></i> 25</span>
+                            </div>
+                        </li>
+
+                        <li class="post-item">
+                            <div class="post-title">Bad Bunny gives heartfelt message to Chile: "One of the first countries to embrace the culture and the Puerto Rican Reggaeton movement in the 2000's." "One day we will sing 120 together, I promise." 🇵🇷🇨🇱</div>
+                            <div class="post-meta">
+                                <span>r/reggaeton</span>
+                                <span><i class="fas fa-arrow-up"></i> 347</span>
+                                <span><i class="fas fa-comment"></i> 23</span>
+                            </div>
+                        </li>
+
+                        <li class="post-item">
+                            <div class="post-title">Psychedelic cumbia but edgier or more heavy?</div>
+                            <div class="post-meta">
+                                <span>r/cumbia</span>
+                                <span><i class="fas fa-arrow-up"></i> 20</span>
+                                <span><i class="fas fa-comment"></i> 29</span>
+                            </div>
+                        </li>
+
+                        <li class="post-item">
+                            <div class="post-title">Cumbiamba in Oakland</div>
+                            <div class="post-meta">
+                                <span>r/cumbia</span>
+                                <span><i class="fas fa-arrow-up"></i> 16</span>
+                                <span><i class="fas fa-comment"></i> 0</span>
+                            </div>
+                        </li>
+
+                    </ul>
+                </div>
+
+                <div class="region-card">
+                    <div class="region-header">
+                        <h3 class="region-name">Nordic/Europe</h3>
+                        <span style="color: var(--gray); font-size: 0.9rem;">
+                            3 subreddits
+                        </span>
+                    </div>
+                    <ul class="post-list">
+
+                        <li class="post-item">
+                            <div class="post-title">YouTube: Ædel Fetich – Ridderlig Lider (2026)</div>
+                            <div class="post-meta">
+                                <span>r/nordicmusic</span>
+                                <span><i class="fas fa-arrow-up"></i> 2</span>
+                                <span><i class="fas fa-comment"></i> 0</span>
+                            </div>
+                        </li>
+
+                        <li class="post-item">
+                            <div class="post-title">YouTube: Bizarrekult feat. Yusaf "Vicotnik" Parvez – Blikket Hennes (2025)</div>
+                            <div class="post-meta">
+                                <span>r/nordicmusic</span>
+                                <span><i class="fas fa-arrow-up"></i> 2</span>
+                                <span><i class="fas fa-comment"></i> 0</span>
+                            </div>
+                        </li>
+
+                        <li class="post-item">
+                            <div class="post-title">How a joke sound defined 90s rave (you'll know it when you hear it. especially if you where there)</div>
+                            <div class="post-meta">
+                                <span>r/electronicmusic</span>
+                                <span><i class="fas fa-arrow-up"></i> 138</span>
+                                <span><i class="fas fa-comment"></i> 12</span>
+                            </div>
+                        </li>
+
+                        <li class="post-item">
+                            <div class="post-title">Ask Tinlicker Anything</div>
+                            <div class="post-meta">
+                                <span>r/electronicmusic</span>
+                                <span><i class="fas fa-arrow-up"></i> 76</span>
+                                <span><i class="fas fa-comment"></i> 156</span>
+                            </div>
+                        </li>
+
+                    </ul>
+                </div>
+
+                <div class="region-card">
+                    <div class="region-header">
+                        <h3 class="region-name">Global</h3>
+                        <span style="color: var(--gray); font-size: 0.9rem;">
+                            7 subreddits
+                        </span>
+                    </div>
+                    <ul class="post-list">
+
+                        <li class="post-item">
+                            <div class="post-title">Hearts2Hearts have earned their first win for "RUDE!" on Mnet M Countdown (260305)</div>
+                            <div class="post-meta">
+                                <span>r/kpop</span>
+                                <span><i class="fas fa-arrow-up"></i> 1166</span>
+                                <span><i class="fas fa-comment"></i> 56</span>
+                            </div>
+                        </li>
+
+                        <li class="post-item">
+                            <div class="post-title">Wendy (Red Velvet) - Wendy threw the first pitch for Team Korea ahead of its win against Team Czechia (260305)</div>
+                            <div class="post-meta">
+                                <span>r/kpop</span>
+                                <span><i class="fas fa-arrow-up"></i> 749</span>
+                                <span><i class="fas fa-comment"></i> 13</span>
+                            </div>
+                        </li>
+
+                        <li class="post-item">
+                            <div class="post-title">Join the official r/bedroompop Discord Server! +self-promotion channel</div>
+                            <div class="post-meta">
+                                <span>r/bedroompop</span>
+                                <span><i class="fas fa-arrow-up"></i> 9</span>
+                                <span><i class="fas fa-comment"></i> 2</span>
+                            </div>
+                        </li>
+
+                        <li class="post-item">
+                            <div class="post-title">r/bedroompop Self Promotion Megathread</div>
+                            <div class="post-meta">
+                                <span>r/bedroompop</span>
+                                <span><i class="fas fa-arrow-up"></i> 9</span>
+                                <span><i class="fas fa-comment"></i> 38</span>
+                            </div>
+                        </li>
+
+                    </ul>
+                </div>
+
+            </div>
+        </section>
+        
+        <div class="cta-section">
+            <h2 class="cta-title">Apply for MINY y0 Artist Residency</h2>
+            <p>Selected artists receive studio time, mentorship, and global exposure across our 13-city network</p>
+            <a href="https://y0.minyvinyl.com" target="_blank" class="cta-button">
+                <i class="fas fa-arrow-right"></i> Apply Now at y0.minyvinyl.com
+            </a>
+            <div style="margin-top: 20px;">
+                <div class="automation-badge">
+                    <i class="fas fa-robot"></i> Auto-updated every 48 hours
+                </div>
+            </div>
+        </div>
+        
+        <footer>
+            <p>MINY y0 Music Trends Monitor • Tracking music communities across 6 continents</p>
+            <p>This page automatically updates with trending music discussions from Reddit communities</p>
+            <p>© 2026 MINY y0 • <a href="https://minyvinyl.com" style="color: var(--primary);">minyvinyl.com</a></p>
+        </footer>
+    </div>
+    
+    <script>
+        // Simple animation for cards on scroll
+        document.addEventListener('DOMContentLoaded', function() {{
+            const cards = document.querySelectorAll('.trend-card, .region-card');
+            
+            const observer = new IntersectionObserver((entries) => {{
+                entries.forEach(entry => {{
+                    if (entry.isIntersecting) {{
+                        entry.target.style.opacity = '1';
+                        entry.target.style.transform = 'translateY(0)';
+                    }}
+                }});
+            }}, {{ threshold: 0.1 }});
+            
+            cards.forEach(card => {{
+                card.style.opacity = '0';
+                card.style.transform = 'translateY(20px)';
+                card.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+                observer.observe(card);
+            }});
+            
+            // Update timestamp every minute
+            function updateTimestamp() {{
+                const now = new Date();
+                const timestampEl = document.querySelector('.timestamp');
+                if (timestampEl) {{
+                    timestampEl.innerHTML = `<i class="fas fa-sync-alt"></i> Last updated: ${{now.toLocaleDateString()}} ${{now.toLocaleTimeString()}}`;
+                }}
+            }}
+            
+            setInterval(updateTimestamp, 60000);
+        }});
+    </script>
+</body>
+</html>

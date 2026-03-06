@@ -15,6 +15,7 @@
 
 ## Features
 
+### Music News (ven.minyvinyl.com)
 - **60-Word Summaries** — DeepSeek AI condenses every article to exactly 60 words
 - **5 Balanced Genres** — Gospel, Hip-Hop, Pop, Rock, Electronic
 - **Dual Discovery** — 5 RSS feeds + Exa AI search across genre queries
@@ -27,8 +28,19 @@
 - **Pull to Refresh** — swipe down for fresh content
 - **PWA Ready** — installable on mobile devices
 
+### Music Trends Monitor (music-trends/)
+- **30+ Subreddits** — Music communities across MINY y0's 13 cities
+- **Regional Coverage** — 5 regions: Latin America, Nordic/Europe, Africa/Middle East, Asia, Global/Indie
+- **Dynamic Dashboards** — Auto-generated trends pages and analytics
+- **48-Hour Automation** — Cron job updates every 2 days
+- **Real-time Insights** — Trending topics, engagement metrics, keyword analysis
+- **MINY y0 Integration** — CTAs linking to y0.minyvinyl.com for artist applications
+- **here.now Publishing** — Permanent hosting of trends dashboards
+- **Data-driven Decisions** — Analytics for artist recruitment and content strategy
+
 ## Architecture
 
+### Music News Scraper
 ```
                      hourly cron (:05)
                               |
@@ -48,6 +60,33 @@
                               |
                     +---------v----------+
                     | Firestore REST API |
+```
+
+### Music Trends Monitor
+```
+                     every 48 hours
+                              |
+                    +---------v----------+
+                    | update_trends.sh   |
+                    |                    |
+                    |  1. Fetch 30+      |
+                    |     subreddits     |
+                    |  2. Generate       |
+                    |     trends HTML    |
+                    |  3. Create         |
+                    |     analytics      |
+                    |  4. Publish to     |
+                    |     here.now       |
+                    +---------+----------+
+                              |
+                    +---------v----------+
+                    | Live Dashboards    |
+                    |                    |
+                    | • Trends Monitor   |
+                    | • Analytics        |
+                    | • MINY y0 CTAs     |
+                    +--------------------+
+```
                     | (constrained write)|
                     +---------+----------+
                               |
@@ -251,6 +290,14 @@ Unauthenticated scraper writes are constrained to:
 Authenticated users have full read/write/delete access.
 
 ## Changelog
+
+### 2026-03-05
+- **Added**: Music Trends Monitoring System (`music-trends/`)
+  - Automated Reddit trends tracking for MINY y0 cities
+  - 30+ music subreddits across 5 regions
+  - Dynamic trends pages and analytics dashboards
+  - 48-hour automation via cron job
+  - here.now publishing integration
 
 ### 2026-02-25
 - **Added**: VM-first scraper operations CLI (`scraper/miny_cli.py`) with `run/logs/status/deploy/rollback/metrics/cron`

@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Subreddits Directory</title>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0a0b;
+            --surface: #141417;
+            --surface-elevated: #1c1c21;
+            --border: #2a2a32;
+            --text: #e8e8ec;
+            --text-dim: #8a8a96;
+            --accent: #ff6b35;
+            --accent-glow: rgba(255, 107, 53, 0.3);
+            --secondary: #35c9ff;
+            --tertiary: #c935ff;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Syne', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 40px 24px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 60px;
+            position: relative;
+        }
+
+        header::before {
+            content: '';
+            position: absolute;
+            top: -100px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%);
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        h1 {
+            font-size: clamp(2.5rem, 8vw, 4.5rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.9rem;
+            color: var(--text-dim);
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+        }
+
+        .region {
+            margin-bottom: 48px;
+        }
+
+        .region-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .region-icon {
+            font-size: 2rem;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--surface-elevated);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+        }
+
+        .region-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+
+        .region-cities {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            margin-top: 4px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 4px;
+            height: 100%;
+            background: var(--accent);
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            border-color: var(--accent);
+            box-shadow: 0 12px 40px rgba(255, 107, 53, 0.15);
+        }
+
+        .card:hover::before {
+            opacity: 1;
+        }
+
+        .card-title {
+            font-family: 'Space Mono', monospace;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--accent);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-title::before {
+            content: 'r/';
+            color: var(--text-dim);
+            font-size: 0.8em;
+        }
+
+        .card-desc {
+            font-size: 0.85rem;
+            color: var(--text-dim);
+        }
+
+        .card-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 12px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--secondary);
+            text-decoration: none;
+            transition: color 0.2s ease;
+        }
+
+        .card-link:hover {
+            color: var(--text);
+        }
+
+        .card-link::after {
+            content: '→';
+            transition: transform 0.2s ease;
+        }
+
+        .card-link:hover::after {
+            transform: translateX(4px);
+        }
+
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .tag {
+            font-family: 'Space Mono', monospace;
+            font-size: 0.65rem;
+            padding: 4px 10px;
+            background: var(--surface-elevated);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            color: var(--text-dim);
+        }
+
+        .section-intro {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .section-intro p {
+            color: var(--text-dim);
+            max-width: 600px;
+            margin: 0 auto;
+            font-size: 1.1rem;
+        }
+
+        .legend {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+            padding: 16px;
+            background: var(--surface);
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+        }
+
+        .legend-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .legend-dot.nordic { background: #4ecdc4; }
+        .legend-dot.europe { background: #45b7d1; }
+        .legend-dot.africa { background: #f9ca24; }
+        .legend-dot.north-america { background: #6c5ce7; }
+        .legend-dot.latin-america { background: #ff6b35; }
+        .legend-dot.caribbean { background: #00d2d3; }
+        .legend-dot.asia { background: #ff9ff3; }
+
+        footer {
+            text-align: center;
+            margin-top: 80px;
+            padding-top: 40px;
+            border-top: 1px solid var(--border);
+            color: var(--text-dim);
+            font-family: 'Space Mono', monospace;
+            font-size: 0.75rem;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 24px 16px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            .region-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Music Subreddits</h1>
+            <p class="subtitle">A curated directory of music communities on Reddit</p>
+        </header>
+
+        <div class="legend">
+            <div class="legend-item"><span class="legend-dot nordic"></span> Nordic</div>
+            <div class="legend-item"><span class="legend-dot europe"></span> Europe</div>
+            <div class="legend-item"><span class="legend-dot africa"></span> Africa</div>
+            <div class="legend-item"><span class="legend-dot north-america"></span> North America</div>
+            <div class="legend-item"><span class="legend-dot latin-america"></span> Latin America</div>
+            <div class="legend-item"><span class="legend-dot caribbean"></span> Caribbean</div>
+            <div class="legend-item"><span class="legend-dot asia"></span> Asia</div>
+        </div>
+
+        <div class="section-intro">
+            <p>Discover music communities across Reddit — from indie and bedroom pop to regional genres and world music. Curated for artists, producers, and music enthusiasts.</p>
+        </div>
+
+        <!-- GENERAL / CROSS-REGIONAL -->
+        <section class="region">
+            <div class="region-header">
+                <div class="region-icon">🌐</div>
+                <div>
+                    <h2 class="region-title">General Music</h2>
+                    <p class="region-cities">Global Reddit music communities</p>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">indie</div>
+                    <div class="card-desc">Indie music discussion, discovery, and original releases</div>
+                    <a href="https://reddit.com/r/indie" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">indie rock</span>
+                        <span class="tag">alternative</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">alternative</div>
+                    <div class="card-desc">Alternative rock, Britpop, and underground sounds</div>
+                    <a href="https://reddit.com/r/alternative" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">rock</span>
+                        <span class="tag">britpop</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">bedroompop</div>
+                    <div class="card-desc">Bedroom producers and home-recorded music</div>
+                    <a href="https://reddit.com/r/bedroompop" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">lofi</span>
+                        <span class="tag">indie</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">Music</div>
+                    <div class="card-desc">The main music subreddit — 33M+ members</div>
+                    <a href="https://reddit.com/r/Music" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">general</span>
+                        <span class="tag">discussion</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">indieheads</div>
+                    <div class="card-desc">Indie music community and news</div>
+                    <a href="https://reddit.com/r/indieheads" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">listentothis</div>
+                    <div class="card-desc">Discover new music you won't hear on the radio</div>
+                    <a href="https://reddit.com/r/listentothis" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">discovery</span>
+                        <span class="tag">hidden gems</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">WeAreTheMusicMakers</div>
+                    <div class="card-desc">Music production, industry talk, and artist advice</div>
+                    <a href="https://reddit.com/r/WeAreTheMusicMakers" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">production</span>
+                        <span class="tag">industry</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">ThisIsOurMusic</div>
+                    <div class="card-desc">Original music only — share your creations</div>
+                    <a href="https://reddit.com/r/ThisIsOurMusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">original</span>
+                        <span class="tag">feedback</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">MusicInProduction</div>
+                    <div class="card-desc">Production feedback and collabs</div>
+                    <a href="https://reddit.com/r/MusicInProduction" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">under10k</div>
+                    <div class="card-desc">Music with under 10k listeners</div>
+                    <a href="https://reddit.com/r/under10k" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">underground</span>
+                        <span class="tag">discovery</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">newmusic</div>
+                    <div class="card-desc">Fresh music releases</div>
+                    <a href="https://reddit.com/r/newmusic" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">hiphopheads</div>
+                    <div class="card-desc">Hip-hop and rap discussion</div>
+                    <a href="https://reddit.com/r/hiphopheads" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">rap</span>
+                        <span class="tag">hip hop</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- NORDIC -->
+        <section class="region">
+            <div class="region-header">
+                <div class="region-icon">🪼</div>
+                <div>
+                    <h2 class="region-title">Nordic</h2>
+                    <p class="region-cities">Stockholm • Copenhagen</p>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">nordicmusic</div>
+                    <div class="card-desc">Music from Scandinavia and Nordic countries</div>
+                    <a href="https://reddit.com/r/nordicmusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">scandinavia</span>
+                        <span class="tag">sweden</span>
+                        <span class="tag">norway</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">scandinavianmusic</div>
+                    <div class="card-desc">Music scene in Denmark, Norway, Sweden, Finland</div>
+                    <a href="https://reddit.com/r/scandinavianmusic" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">swedishhouse</div>
+                    <div class="card-desc">Swedish electronic and house music production</div>
+                    <a href="https://reddit.com/r/swedishhouse" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">edm</span>
+                        <span class="tag">electronic</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">nordic_rock</div>
+                    <div class="card-desc">Rock music from Nordic countries</div>
+                    <a href="https://reddit.com/r/nordic_rock" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">icelandicmusic</div>
+                    <div class="card-desc">Icelandic artists and music</div>
+                    <a href="https://reddit.com/r/icelandicmusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">iceland</span>
+                        <span class="tag">bjork</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">finnishmusic</div>
+                    <div class="card-desc">Finnish music and artists</div>
+                    <a href="https://reddit.com/r/finnishmusic" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- EUROPE -->
+        <section class="region">
+            <div class="region-header">
+                <div class="region-icon">🏰</div>
+                <div>
+                    <h2 class="region-title">Europe</h2>
+                    <p class="region-cities">Amsterdam</p>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">electronicmusic</div>
+                    <div class="card-desc">Electronic music of all genres — house, techno, ambient</div>
+                    <a href="https://reddit.com/r/electronicmusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">edm</span>
+                        <span class="tag">techno</span>
+                        <span class="tag">house</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">dutchmusic</div>
+                    <div class="card-desc">Dutch music scene and artists</div>
+                    <a href="https://reddit.com/r/dutchmusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">netherlands</span>
+                        <span class="tag">dance</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">techno</div>
+                    <div class="card-desc">Techno production, DJ sets, and discussion</div>
+                    <a href="https://reddit.com/r/techno" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">electronic</span>
+                        <span class="tag">dj</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">house</div>
+                    <div class="card-desc">House music production and culture</div>
+                    <a href="https://reddit.com/r/house" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">electronic</span>
+                        <span class="tag">dance</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title"> EDM </div>
+                    <div class="card-desc">Electronic Dance Music news, events, and discovery</div>
+                    <a href="https://reddit.com/r/EDM" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">edmproduction</div>
+                    <div class="card-desc">EDM production tips and collabs</div>
+                    <a href="https://reddit.com/r/edmproduction" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- AFRICA -->
+        <section class="region">
+            <div class="region-header">
+                <div class="region-icon">🌍</div>
+                <div>
+                    <h2 class="region-title">Africa</h2>
+                    <p class="region-cities">Morocco</p>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">africanmusic</div>
+                    <div class="card-desc">Music from across the African continent</div>
+                    <a href="https://reddit.com/r/africanmusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">afrobeats</span>
+                        <span class="tag">amapiano</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">arabicmusic</div>
+                    <div class="card-desc">Arabic and Middle Eastern music</div>
+                    <a href="https://reddit.com/r/arabicmusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">middle east</span>
+                        <span class="tag">north africa</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">berber</div>
+                    <div class="card-desc">Berber (Amazigh) music and culture</div>
+                    <a href="https://reddit.com/r/berber" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">morocco</div>
+                    <div class="card-desc">General Morocco discussions (music threads)</div>
+                    <a href="https://reddit.com/r/morocco" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- NORTH AMERICA -->
+        <section class="region">
+            <div class="region-header">
+                <div class="region-icon">🗽</div>
+                <div>
+                    <h2 class="region-title">North America</h2>
+                    <p class="region-cities">NYC • Miami • Ithaca</p>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">AudioEngineering</div>
+                    <div class="card-desc">Recording, mixing, and mastering</div>
+                    <a href="https://reddit.com/r/AudioEngineering" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">recording</span>
+                        <span class="tag">mixing</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">songwriters</div>
+                    <div class="card-desc">Songwriting discussion and tips</div>
+                    <a href="https://reddit.com/r/songwriters" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">Guitar</div>
+                    <div class="card-desc">Guitar playing and discussion</div>
+                    <a href="https://reddit.com/r/Guitar" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">synthesizers</div>
+                    <div class="card-desc">Synthesizers and electronic instruments</div>
+                    <a href="https://reddit.com/r/synthesizers" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">DIYGear</div>
+                    <div class="card-desc">DIY music equipment and building</div>
+                    <a href="https://reddit.com/r/DIYGear" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- LATIN AMERICA -->
+        <section class="region">
+            <div class="region-header">
+                <div class="region-icon">🌎</div>
+                <div>
+                    <h2 class="region-title">Latin America</h2>
+                    <p class="region-cities">Mexico City • Medellín • São Paulo</p>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">reggaeton</div>
+                    <div class="card-desc">Reggaeton and latin trap</div>
+                    <a href="https://reddit.com/r/Reggaeton" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">latin trap</span>
+                        <span class="tag">urbano</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">salsa</div>
+                    <div class="card-desc">Salsa music and dance</div>
+                    <a href="https://reddit.com/r/salsa" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">dance</span>
+                        <span class="tag">cuban</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">cumbia</div>
+                    <div class="card-desc">Cumbia and latin rhythms</div>
+                    <a href="https://reddit.com/r/cumbia" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">mexicanmusic</div>
+                    <div class="card-desc">Mexican music — banda, corridos, regional</div>
+                    <a href="https://reddit.com/r/mexicanmusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">banda</span>
+                        <span class="tag">corridos</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">ColombianMusic</div>
+                    <div class="card-desc">Colombian artists and genres</div>
+                    <a href="https://reddit.com/r/ColombianMusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">vallenato</span>
+                        <span class="tag">cumbia</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">brasil</div>
+                    <div class="card-desc">Brazilian music — MPB, samba, funk</div>
+                    <a href="https://reddit.com/r/brasil" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">mpb</span>
+                        <span class="tag">samba</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">latinmusic</div>
+                    <div class="card-desc">Latin music general discussion</div>
+                    <a href="https://reddit.com/r/latinmusic" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- CARIBBEAN -->
+        <section class="region">
+            <div class="region-header">
+                <div class="region-icon">🏝️</div>
+                <div>
+                    <h2 class="region-title">Caribbean</h2>
+                    <p class="region-cities">Dominican Republic</p>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">bachata</div>
+                    <div class="card-desc">Bachata music and dance</div>
+                    <a href="https://reddit.com/r/Bachata" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">dominican</span>
+                        <span class="tag">dance</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">merengue</div>
+                    <div class="card-desc">Merengue music and culture</div>
+                    <a href="https://reddit.com/r/merengue" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">Reggae</div>
+                    <div class="card-desc">Reggae, dancehall, and roots</div>
+                    <a href="https://reddit.com/r/Reggae" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">jamaica</span>
+                        <span class="tag">dancehall</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">CaribbeanMusic</div>
+                    <div class="card-desc">Music from the Caribbean region</div>
+                    <a href="https://reddit.com/r/CaribbeanMusic" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- ASIA -->
+        <section class="region">
+            <div class="region-header">
+                <div class="region-icon">🎌</div>
+                <div>
+                    <h2 class="region-title">Asia</h2>
+                    <p class="region-cities">Tokyo • Bali</p>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">jpop</div>
+                    <div class="card-desc">Japanese pop music</div>
+                    <a href="https://reddit.com/r/jpop" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">j-pop</span>
+                        <span class="tag">idols</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">citypop</div>
+                    <div class="card-desc">Japanese city pop — 80s nostalgia wave</div>
+                    <a href="https://reddit.com/r/citypop" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">80s</span>
+                        <span class="tag">nostalgia</span>
+                        <span class="tag">vaporwave</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">anisong</div>
+                    <div class="card-desc">Anime music and J-rock</div>
+                    <a href="https://reddit.com/r/anisong" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">anime</span>
+                        <span class="tag">j-rock</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">indonesianmusic</div>
+                    <div class="card-desc">Indonesian music scene</div>
+                    <a href="https://reddit.com/r/indonesianmusic" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">indo</span>
+                        <span class="tag">kroncong</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">kpop</div>
+                    <div class="card-desc">Korean pop music</div>
+                    <a href="https://reddit.com/r/kpop" target="_blank" class="card-link">Visit subreddit</a>
+                    <div class="tags">
+                        <span class="tag">k-pop</span>
+                        <span class="tag">idols</span>
+                    </div>
+                </div>
+                <div class="card">
+                    <div class="card-title">indianmusic</div>
+                    <div class="card-desc">Indian music — Bollywood, classical</div>
+                    <a href="https://reddit.com/r/indianmusic" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+            </div>
+        </section>
+
+        <!-- GENRE CATEGORIES -->
+        <section class="region">
+            <div class="region-header">
+                <div class="region-icon">🎸</div>
+                <div>
+                    <h2 class="region-title">Genre Categories</h2>
+                    <p class="region-cities">Cross-regional music genres</p>
+                </div>
+            </div>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-title">folk</div>
+                    <div class="card-desc">Traditional and contemporary folk music</div>
+                    <a href="https://reddit.com/r/folk" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">rock</div>
+                    <div class="card-desc">Rock music of all subgenres</div>
+                    <a href="https://reddit.com/r/rock" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">Metal</div>
+                    <div class="card-desc">Heavy metal and metal subgenres</div>
+                    <a href="https://reddit.com/r/Metal" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">punk</div>
+                    <div class="card-desc">Punk rock and hardcore</div>
+                    <a href="https://reddit.com/r/punk" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">jazz</div>
+                    <div class="card-desc">Jazz music discussion</div>
+                    <a href="https://reddit.com/r/jazz" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">blues</div>
+                    <div class="card-desc">Blues music</div>
+                    <a href="https://reddit.com/r/blues" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">soul</div>
+                    <div class="card-desc">Soul and R&B</div>
+                    <a href="https://reddit.com/r/soul" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">funk</div>
+                    <div class="card-desc">Funk music</div>
+                    <a href="https://reddit.com/r/funk" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">lofi</div>
+                    <div class="card-desc">Lo-fi hip hop and beats</div>
+                    <a href="https://reddit.com/r/lofi" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">dreampop</div>
+                    <div class="card-desc">Dream pop and shoegaze</div>
+                    <a href="https://reddit.com/r/dreampop" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">shoegaze</div>
+                    <div class="card-desc">Shoegaze and related genres</div>
+                    <a href="https://reddit.com/r/shoegaze" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">psychrock</div>
+                    <div class="card-desc">Psychedelic rock</div>
+                    <a href="https://reddit.com/r/psychrock" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">PostRock</div>
+                    <div class="card-desc">Post-rock</div>
+                    <a href="https://reddit.com/r/PostRock" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">worldmusic</div>
+                    <div class="card-desc">World music from all cultures</div>
+                    <a href="https://reddit.com/r/worldmusic" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">americana</div>
+                    <div class="card-desc">Americana and roots music</div>
+                    <a href="https://reddit.com/r/americana" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">country</div>
+                    <div class="card-desc">Country music</div>
+                    <a href="https://reddit.com/r/country" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">bluegrass</div>
+                    <div class="card-desc">Bluegrass music</div>
+                    <a href="https://reddit.com/r/bluegrass" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+                <div class="card">
+                    <div class="card-title">celticmusic</div>
+                    <div class="card-desc">Celtic music and culture</div>
+                    <a href="https://reddit.com/r/celticmusic" target="_blank" class="card-link">Visit subreddit</a>
+                </div>
+            </div>
+        </section>
+
+        <footer>
+            <p>Curated for MINY y0 Residency Artists</p>
+            <p style="margin-top: 8px;">Music Subreddits Directory</p>
+            <p style="margin-top: 16px;"><a href="trends.html" style="color: var(--secondary); text-decoration: none; font-family: 'Space Mono', monospace; font-size: 0.7rem;">→ View Trending Music News</a></p>
+        </footer>
+    </div>
+</body>
+</html>
