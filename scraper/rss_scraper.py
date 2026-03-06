@@ -1453,6 +1453,11 @@ Headline:"""
                     article_dict["full_content"][:3997] + "..."
                 )
 
+            # Firestore rules require string type for image_url/location.
+            # Normalize nullable values to empty string so constrained writes pass.
+            article_dict["image_url"] = article_dict.get("image_url") or ""
+            article_dict["location"] = article_dict.get("location") or ""
+
             canonical_url = self._normalize_url(article_dict["source_url"])
             doc_id = self._build_doc_id(
                 Article(
