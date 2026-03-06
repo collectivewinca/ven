@@ -83,7 +83,7 @@ function App() {
         'title', 'summary', 'source', 'source_url', 'primary_genre',
         'secondary_genres', 'artist_names', 'image_source',
         'published_at', 'read_time', 'share_count', 'email_count',
-        'bookmark_count', 'view_count'
+        'bookmark_count', 'view_count', 'location'
       ];
 
       let allDocs: any[] = [];
@@ -147,7 +147,8 @@ function App() {
           emailCount: getField(fields.email_count) || 0,
           bookmarkCount: getField(fields.bookmark_count) || 0,
           viewCount: getField(fields.view_count) || 0,
-          isBookmarked: false
+          isBookmarked: false,
+          location: getField(fields.location) || ''
         };
       });
 
@@ -523,6 +524,52 @@ function App() {
   const genreGradient = (genre: string) =>
     genres.find(g => g.id === genre)?.gradient || 'from-gray-600 to-gray-500';
 
+  const locationFlag = (location: string): string => {
+    const flags: Record<string, string> = {
+      scandinavia: '🇸🇪',
+      amsterdam: '🇳🇱',
+      morocco: '🇲🇦',
+      nyc: '🇺🇸',
+      mexico: '🇲🇽',
+      medellin: '🇨🇴',
+      brazil: '🇧🇷',
+      miami: '🇺🇸',
+      caribbean: '🇩🇴',
+      tokyo: '🇯🇵',
+      bali: '🇮🇩',
+      // Fallback mappings
+      'new york': '🇺🇸',
+      'new york city': '🇺🇸',
+      'los angeles': '🇺🇸',
+      'london': '🇬🇧',
+      'uk': '🇬🇧',
+      'england': '🇬🇧',
+      'nashville': '🇺🇸',
+      'atlanta': '🇺🇸',
+      'chicago': '🇺🇸',
+      'toronto': '🇨🇦',
+      'canada': '🇨🇦',
+      'australia': '🇦🇺',
+      'sydney': '🇦🇺',
+      'germany': '🇩🇪',
+      'berlin': '🇩🇪',
+      'france': '🇫🇷',
+      'paris': '🇫🇷',
+      'nigeria': '🇳🇬',
+      'south africa': '🇿🇦',
+      'jamaica': '🇯🇲',
+      'cuba': '🇨🇺',
+      'korea': '🇰🇷',
+      'seoul': '🇰🇷',
+      'china': '🇨🇳',
+      'india': '🇮🇳',
+      'mumbai': '🇮🇳',
+      'dubai': '🇦🇪',
+      'uae': '🇦🇪',
+    };
+    return flags[location?.toLowerCase()] || '';
+  };
+
   // Carousel dots: show max 7 with ellipsis
   const renderDots = () => {
     const total = filteredArticles.length;
@@ -847,6 +894,11 @@ function App() {
                     <span className={`px-2.5 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(currentArticle.primaryGenre)} text-white`}>
                       {currentArticle.primaryGenre}
                     </span>
+                    {currentArticle.location && locationFlag(currentArticle.location) && (
+                      <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
+                        {locationFlag(currentArticle.location)}
+                      </span>
+                    )}
                     <span className="text-[10px] uppercase tracking-[0.14em] font-medium" style={{ color: 'var(--text-muted)' }}>
                       {currentArticle.source}
                     </span>
@@ -895,6 +947,11 @@ function App() {
                         <span className={`px-3 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(currentArticle.primaryGenre)} text-white`}>
                           {currentArticle.primaryGenre}
                         </span>
+                        {currentArticle.location && locationFlag(currentArticle.location) && (
+                          <span className="text-[14px]" style={{ color: 'var(--text-secondary)' }}>
+                            {locationFlag(currentArticle.location)}
+                          </span>
+                        )}
                         <span className="px-3 py-[3px] rounded-full text-[10px] tracking-[0.08em] backdrop-blur-md uppercase font-medium" style={{ color: 'var(--text-secondary)', background: 'var(--action-bg)' }}>
                           {currentArticle.source}
                         </span>

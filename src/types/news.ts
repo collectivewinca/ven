@@ -16,6 +16,7 @@ export interface MusicNewsArticle {
   bookmarkCount: number;
   viewCount: number;
   isBookmarked?: boolean;
+  location?: string;
 }
 
 export type Genre = 'gospel' | 'hiphop' | 'pop' | 'rock' | 'electronic' | 'tech' | 'all';

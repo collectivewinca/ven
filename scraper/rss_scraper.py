@@ -205,6 +205,7 @@ class Article:
     view_count: int
     fetched_at: datetime
     image_source: str = "unknown"
+    location: str = ""
 
 
 class RSSScraper:
@@ -755,7 +756,10 @@ Your 60-word summary:"""
         try:
             response = requests.post(
                 url,
-                headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                headers={
+                    "x-goog-api-key": GEMINI_API_KEY,
+                    "Content-Type": "application/json",
+                },
                 json=payload,
                 timeout=30,
             )
@@ -769,7 +773,11 @@ Your 60-word summary:"""
                 .strip()
             )
 
-            if not summary or self._is_refusal(summary) or summary.upper().startswith("SKIP"):
+            if (
+                not summary
+                or self._is_refusal(summary)
+                or summary.upper().startswith("SKIP")
+            ):
                 print("  ⚠ Gemini refused/skipped summary, using fallback")
                 words = content.split()
                 return " ".join(words[:60]) + "." if words else title
@@ -789,7 +797,9 @@ Your 60-word summary:"""
             words = content.split()
             return " ".join(words[:60]) + "." if words else title
 
-    def _expand_summary_gemini(self, title: str, content: str, short_summary: str) -> str:
+    def _expand_summary_gemini(
+        self, title: str, content: str, short_summary: str
+    ) -> str:
         """If initial summary is too short, ask Gemini to expand it to 60 words."""
         url = (
             f"https://generativelanguage.googleapis.com/v1beta/models/"
@@ -810,7 +820,10 @@ Rewrite as a full 60-word music news brief. Count each word. Return only the sum
         try:
             resp = requests.post(
                 url,
-                headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                headers={
+                    "x-goog-api-key": GEMINI_API_KEY,
+                    "Content-Type": "application/json",
+                },
                 json=payload,
                 timeout=20,
             )
@@ -825,7 +838,9 @@ Rewrite as a full 60-word music news brief. Count each word. Return only the sum
             )
             if expanded and len(expanded.split()) >= 40:
                 words = expanded.split()
-                return " ".join(words[:70]) + ("." if not expanded.rstrip().endswith(".") else "")
+                return " ".join(words[:70]) + (
+                    "." if not expanded.rstrip().endswith(".") else ""
+                )
         except Exception:
             pass
         return short_summary
@@ -833,7 +848,9 @@ Rewrite as a full 60-word music news brief. Count each word. Return only the sum
     def _fetch_article_text(self, url: str) -> str:
         """Lightly fetch an article URL to get more text when Exa only returned a snippet."""
         try:
-            resp = self.session.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+            resp = self.session.get(
+                url, timeout=10, headers={"User-Agent": "Mozilla/5.0"}
+            )
             if resp.status_code != 200:
                 return ""
             # Strip HTML tags and return first 1500 chars of body text
@@ -976,8 +993,12 @@ Rewrite as a full 60-word music news brief. Count each word. Return only the sum
     ) -> str:
         """Generate high-converting CTA headline using Perplexity, with Gemini fallback."""
         # Strip source suffixes from original title before rewriting
-        clean_title = re.sub(r"\s*[|\-–]\s*[A-Z][^|]{3,40}$", "", original_title).strip()
-        clean_title = re.sub(r"\s*\([^)]{3,40}\)\s*$", "", clean_title).strip() or clean_title
+        clean_title = re.sub(
+            r"\s*[|\-–]\s*[A-Z][^|]{3,40}$", "", original_title
+        ).strip()
+        clean_title = (
+            re.sub(r"\s*\([^)]{3,40}\)\s*$", "", clean_title).strip() or clean_title
+        )
 
         if _perplexity_client and not self.perplexity_disabled:
             prompt = f"""Create an engaging, click-worthy headline for this music news story.
@@ -1025,7 +1046,9 @@ New CTA Headline:"""
                 print("  ⚠ Perplexity refused headline, trying Gemini...")
             except Exception as e:
                 self._disable_perplexity_if_needed(e, "cta_headline")
-                print(f"  ⚠ CTA headline error: {self._trim_error(e)}, trying Gemini...")
+                print(
+                    f"  ⚠ CTA headline error: {self._trim_error(e)}, trying Gemini..."
+                )
 
         # Gemini fallback for CTA headline
         if GEMINI_API_KEY:
@@ -1033,7 +1056,9 @@ New CTA Headline:"""
 
         return self._transform_title_fallback(clean_title)
 
-    def _generate_cta_headline_gemini(self, title: str, content: str, artist: str) -> str:
+    def _generate_cta_headline_gemini(
+        self, title: str, content: str, artist: str
+    ) -> str:
         """Generate CTA headline via Gemini when Perplexity is unavailable."""
         prompt = f"""Write a punchy, click-worthy music news headline.
 
@@ -1063,7 +1088,10 @@ Headline:"""
         try:
             resp = requests.post(
                 url,
-                headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+                headers={
+                    "x-goog-api-key": GEMINI_API_KEY,
+                    "Content-Type": "application/json",
+                },
                 json=payload,
                 timeout=15,
             )
@@ -1098,28 +1126,89 @@ Headline:"""
         title = title.strip() or original_title
 
         # Power words to add
-        power_words = ["Breaking", "Exclusive", "Revealed", "Unveiled", "Must-See", "Inside"]
+        power_words = [
+            "Breaking",
+            "Exclusive",
+            "Revealed",
+            "Unveiled",
+            "Must-See",
+            "Inside",
+        ]
         has_power_word = any(w.lower() in title.lower() for w in power_words)
 
         if not has_power_word and len(title) < 70:
             import random
+
             title = f"{random.choice(power_words)}: {title}"
 
         return title.strip()
 
     # Music-relevance keywords — at least one must appear for non-RSS articles
     MUSIC_RELEVANCE_KEYWORDS = {
-        "music", "song", "songs", "album", "albums", "artist", "artists",
-        "band", "bands", "tour", "tours", "concert", "festival", "dj",
-        "hip hop", "hip-hop", "rap", "rapper", "pop", "rock", "gospel",
-        "electronic", "edm", "r&b", "rnb", "singer", "vocalist",
-        "grammy", "billboard", "spotify", "vinyl", "record label",
-        "mixtape", "ep ", "lp ", "single", "remix", "producer",
-        "beats", "lyrics", "verse", "chorus", "track", "tracklist",
-        "streaming", "playlist", "soundcloud", "apple music",
-        "music video", "headliner", "genre", "indie", "punk", "metal",
-        "jazz", "classical", "country", "reggae", "latin", "afrobeat",
-        "k-pop", "idol", "boyband", "girlband",
+        "music",
+        "song",
+        "songs",
+        "album",
+        "albums",
+        "artist",
+        "artists",
+        "band",
+        "bands",
+        "tour",
+        "tours",
+        "concert",
+        "festival",
+        "dj",
+        "hip hop",
+        "hip-hop",
+        "rap",
+        "rapper",
+        "pop",
+        "rock",
+        "gospel",
+        "electronic",
+        "edm",
+        "r&b",
+        "rnb",
+        "singer",
+        "vocalist",
+        "grammy",
+        "billboard",
+        "spotify",
+        "vinyl",
+        "record label",
+        "mixtape",
+        "ep ",
+        "lp ",
+        "single",
+        "remix",
+        "producer",
+        "beats",
+        "lyrics",
+        "verse",
+        "chorus",
+        "track",
+        "tracklist",
+        "streaming",
+        "playlist",
+        "soundcloud",
+        "apple music",
+        "music video",
+        "headliner",
+        "genre",
+        "indie",
+        "punk",
+        "metal",
+        "jazz",
+        "classical",
+        "country",
+        "reggae",
+        "latin",
+        "afrobeat",
+        "k-pop",
+        "idol",
+        "boyband",
+        "girlband",
     }
 
     def is_music_relevant(self, title: str, content: str, source_genre: str) -> bool:
@@ -1288,7 +1377,11 @@ Headline:"""
         if not artist_names:
             return False
         primary = artist_names[0].lower().strip()
-        return bool(primary and self.existing_artist_counts.get(primary, 0) >= self.MAX_ARTICLES_PER_ARTIST)
+        return bool(
+            primary
+            and self.existing_artist_counts.get(primary, 0)
+            >= self.MAX_ARTICLES_PER_ARTIST
+        )
 
     def check_duplicate(self, title: str, source_url: str) -> bool:
         """Check duplicates primarily via canonical source URL."""
@@ -1387,10 +1480,12 @@ Headline:"""
                 if canonical_url:
                     self.existing_source_urls.add(canonical_url)
                 self.existing_titles.add((article.title or "").lower().strip())
-                for name in (article.artist_names or []):
+                for name in article.artist_names or []:
                     key = name.lower().strip()
                     if key:
-                        self.existing_artist_counts[key] = self.existing_artist_counts.get(key, 0) + 1
+                        self.existing_artist_counts[key] = (
+                            self.existing_artist_counts.get(key, 0) + 1
+                        )
                 return True
             else:
                 detail = ""
@@ -1421,10 +1516,12 @@ Headline:"""
                         if canonical_url:
                             self.existing_source_urls.add(canonical_url)
                         self.existing_titles.add((article.title or "").lower().strip())
-                        for name in (article.artist_names or []):
+                        for name in article.artist_names or []:
                             key = name.lower().strip()
                             if key:
-                                self.existing_artist_counts[key] = self.existing_artist_counts.get(key, 0) + 1
+                                self.existing_artist_counts[key] = (
+                                    self.existing_artist_counts.get(key, 0) + 1
+                                )
                         return True
 
                 print(f"  ✗ Failed to save: {response.status_code} — {detail}")
@@ -1541,6 +1638,7 @@ Headline:"""
                     view_count=0,
                     fetched_at=datetime.now(),
                     image_source=image_source,
+                    location=item.get("location", ""),
                 )
 
                 if self.save_to_firebase(article):
@@ -1573,7 +1671,10 @@ Headline:"""
 
     # Location-focused music news queries — each targets a specific city/region scene
     EXA_LOCATION_QUERIES = [
-        ("Stockholm Copenhagen Scandinavian music artist new album release", "scandinavia"),
+        (
+            "Stockholm Copenhagen Scandinavian music artist new album release",
+            "scandinavia",
+        ),
         ("Amsterdam Netherlands music scene DJ producer new release", "amsterdam"),
         ("Morocco Moroccan music gnawa fusion artist new release", "morocco"),
         ("New York City NYC music artist new album underground scene release", "nyc"),
@@ -1588,19 +1689,33 @@ Headline:"""
 
     # URL patterns that indicate a list/index page rather than an article
     _EXA_SKIP_URL_PATTERNS = [
-        r"^https?://[^/]+/?$",                        # bare homepage
-        r"/news/?$", r"/music/?$", r"/articles/?$",   # section index pages
-        r"/category/", r"/tag/", r"/genre/",           # taxonomy pages
-        r"/new/?$", r"/latest/?$", r"/feed/?$",        # feed/listing pages
-        r"open\.spotify\.com", r"music\.apple\.com",  # streaming platforms
-        r"amazon\.com/music", r"tidal\.com",
-        r"facebook\.com", r"instagram\.com",           # social media
-        r"twitter\.com", r"reddit\.com",
-        r"^https?://bit\.ly", r"^https?://trib\.al",  # link shorteners
-        r"^https?://apple\.co", r"^https?://amzn\.",
-        r"metacritic\.com/browse", r"albumoftheyear\.org/(releases|upcoming|genre)",
+        r"^https?://[^/]+/?$",  # bare homepage
+        r"/news/?$",
+        r"/music/?$",
+        r"/articles/?$",  # section index pages
+        r"/category/",
+        r"/tag/",
+        r"/genre/",  # taxonomy pages
+        r"/new/?$",
+        r"/latest/?$",
+        r"/feed/?$",  # feed/listing pages
+        r"open\.spotify\.com",
+        r"music\.apple\.com",  # streaming platforms
+        r"amazon\.com/music",
+        r"tidal\.com",
+        r"facebook\.com",
+        r"instagram\.com",  # social media
+        r"twitter\.com",
+        r"reddit\.com",
+        r"^https?://bit\.ly",
+        r"^https?://trib\.al",  # link shorteners
+        r"^https?://apple\.co",
+        r"^https?://amzn\.",
+        r"metacritic\.com/browse",
+        r"albumoftheyear\.org/(releases|upcoming|genre)",
         r"popvortex\.com/music/charts",
-        r"charts\.apple", r"/top-charts",
+        r"charts\.apple",
+        r"/top-charts",
     ]
 
     def _discover_perplexity_fallback(self) -> Tuple[int, int]:
@@ -1861,7 +1976,9 @@ Headline:"""
                     if not r.url or not r.title:
                         continue
                     # Skip index pages by URL pattern OR by missing published_date
-                    if not self._is_article_url(r.url) or not getattr(r, "published_date", None):
+                    if not self._is_article_url(r.url) or not getattr(
+                        r, "published_date", None
+                    ):
                         skipped_urls += 1
                         continue
                     text = re.sub(r"<[^>]+>", "", r.text or "").strip()
@@ -1894,7 +2011,9 @@ Headline:"""
                 for r in result.results:
                     if not r.url or not r.title:
                         continue
-                    if not self._is_article_url(r.url) or not getattr(r, "published_date", None):
+                    if not self._is_article_url(r.url) or not getattr(
+                        r, "published_date", None
+                    ):
                         skipped_urls += 1
                         continue
                     text = re.sub(r"<[^>]+>", "", r.text or "").strip()
@@ -1907,13 +2026,16 @@ Headline:"""
                             "content": text,
                             "pub_date": r.published_date or "",
                             "image": getattr(r, "image", None),
-                            "genre_hint": location_hint,
+                            "genre_hint": "mixed",  # Reset genre for location-based articles
+                            "location": location_hint,
                         }
                     )
             except Exception as e:
                 print(f"  ⚠ Exa location query error ({query[:40]}...): {e}")
 
-        print(f"  Found {len(items)} article URLs ({skipped_urls} index/list pages skipped)")
+        print(
+            f"  Found {len(items)} article URLs ({skipped_urls} index/list pages skipped)"
+        )
 
         if not items:
             print("  Exa returned no results, falling back to Perplexity...")
@@ -2104,8 +2226,6 @@ Headline:"""
             f"saved={processed} duplicates={duplicates} errors={errors}"
         )
         return processed, len(items)
-
-
 
     # ------------------------------------------------------------------
     # Archive stale articles
