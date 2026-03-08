@@ -1011,12 +1011,7 @@ function App() {
                                 Discover Artist <ExternalLink size={9} />
                               </a>
                             </>
-                          ) : (
-                            <>
-                              <span className="mx-2.5" style={{ color: 'var(--text-faint)' }}>·</span>
-                              {currentArticle.readTime}s read
-                            </>
-                          );
+                          ) : null;
                         })()}
                       </span>
                       {renderActions()}
