@@ -5,6 +5,7 @@ import { LazyArticleImage } from './components/LazyArticleImage';
 import { ArticleSkeleton } from './components/ArticleSkeleton';
 import { Toast } from './components/Toast';
 import { PullToRefresh } from './components/PullToRefresh';
+import { useArtistEpk } from './hooks/useArtistEpk';
 
 function App() {
   const [articles, setArticles] = useState<MusicNewsArticle[]>([]);
@@ -25,6 +26,7 @@ function App() {
   const [isPulling, setIsPulling] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
+  const { ready: epkReady, getEpkUrl, findEpkInText } = useArtistEpk();
   const [audioArticleId, setAudioArticleId] = useState<string | null>(null);
 
   // ---------- Theme ----------
@@ -911,6 +913,21 @@ function App() {
                   <p className="font-light leading-[1.6] tracking-[0.01em]" style={{ fontSize: 'clamp(0.8rem, 0.75rem + 0.5vw, 0.9rem)', color: 'var(--text-secondary)' }}>
                     {currentArticle.summary}
                   </p>
+
+                  {(() => {
+                    const epkUrl = epkReady ? (getEpkUrl(currentArticle.artistNames) || findEpkInText(currentArticle.title + ' ' + currentArticle.summary)) : null;
+                    return epkUrl ? (
+                      <a
+                        href={epkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 self-start px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em]"
+                        style={{ background: 'var(--accent, #6366f1)', color: '#fff', textDecoration: 'none' }}
+                      >
+                        Discover Artist <ExternalLink size={10} />
+                      </a>
+                    ) : null;
+                  })()}
                 </div>
               </div>
 
@@ -978,8 +995,29 @@ function App() {
                     <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                       <span className="text-[10px] uppercase tracking-[0.16em] font-medium" style={{ color: 'var(--text-muted)' }}>
                         {new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        <span className="mx-2.5" style={{ color: 'var(--text-faint)' }}>·</span>
-                        {currentArticle.readTime}s read
+                        {(() => {
+                          const epkUrl = epkReady ? (getEpkUrl(currentArticle.artistNames) || findEpkInText(currentArticle.title + ' ' + currentArticle.summary)) : null;
+                          return epkUrl ? (
+                            <>
+                              <span className="mx-2.5" style={{ color: 'var(--text-faint)' }}>·</span>
+                              <a
+                                href={epkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 font-bold"
+                                style={{ color: 'var(--accent, #6366f1)', textDecoration: 'none', letterSpacing: '0.08em' }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Discover Artist <ExternalLink size={9} />
+                              </a>
+                            </>
+                          ) : (
+                            <>
+                              <span className="mx-2.5" style={{ color: 'var(--text-faint)' }}>·</span>
+                              {currentArticle.readTime}s read
+                            </>
+                          );
+                        })()}
                       </span>
                       {renderActions()}
                     </div>
