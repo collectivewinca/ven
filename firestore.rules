@@ -36,6 +36,8 @@ service cloud.firestore {
         'image_url',
         'image_source',
         'location',
+        'epk_url',
+        'epk_status',
         'published_at',
         'read_time',
         'share_count',
@@ -58,6 +60,8 @@ service cloud.firestore {
         request.resource.data.image_url is string &&
         (!('image_source' in request.resource.data) || request.resource.data.image_source is string) &&
         (!('location' in request.resource.data) || request.resource.data.location is string) &&
+        (!('epk_url' in request.resource.data) || request.resource.data.epk_url is string) &&
+        (!('epk_status' in request.resource.data) || request.resource.data.epk_status is string) &&
         request.resource.data.published_at is string &&
         request.resource.data.read_time is int &&
         request.resource.data.share_count is int &&
@@ -75,6 +79,8 @@ service cloud.firestore {
         request.resource.data.full_content.size() <= 4000 &&
         (!('image_source' in request.resource.data) || request.resource.data.image_source.size() <= 64) &&
         (!('location' in request.resource.data) || request.resource.data.location.size() <= 64) &&
+        (!('epk_url' in request.resource.data) || request.resource.data.epk_url.size() <= 256) &&
+        (!('epk_status' in request.resource.data) || request.resource.data.epk_status.size() <= 16) &&
         request.resource.data.source_url.matches('^https://.*') &&
         request.resource.data.read_time >= 1 &&
         request.resource.data.read_time <= 600 &&

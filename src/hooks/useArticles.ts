@@ -22,7 +22,7 @@ export function useArticles() {
         'title', 'summary', 'source', 'source_url', 'primary_genre',
         'secondary_genres', 'artist_names', 'image_source',
         'published_at', 'read_time', 'share_count', 'email_count',
-        'bookmark_count', 'view_count'
+        'bookmark_count', 'view_count', 'epk_url', 'epk_status'
       ];
 
       let allDocs: any[] = [];
@@ -82,7 +82,9 @@ export function useArticles() {
           emailCount: getField(fields.email_count) || 0,
           bookmarkCount: getField(fields.bookmark_count) || 0,
           viewCount: getField(fields.view_count) || 0,
-          isBookmarked: false
+          isBookmarked: false,
+          epkUrl: getField(fields.epk_url) || '',
+          epkStatus: getField(fields.epk_status) || 'missing',
         };
       });
 

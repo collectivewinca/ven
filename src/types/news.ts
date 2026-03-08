@@ -17,6 +17,8 @@ export interface MusicNewsArticle {
   viewCount: number;
   isBookmarked?: boolean;
   location?: string;
+  epkUrl?: string;
+  epkStatus?: 'ready' | 'pending' | 'missing';
 }
 
 export type Genre = 'gospel' | 'hiphop' | 'pop' | 'rock' | 'electronic' | 'tech' | 'all';

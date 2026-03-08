@@ -206,12 +206,19 @@ class Article:
     fetched_at: datetime
     image_source: str = "unknown"
     location: str = ""
+    epk_url: str = ""
+    epk_status: str = "missing"
 
 
 class RSSScraper:
     # Max articles for the same primary artist in the active (72h) window.
     # Prevents one artist/event dominating the feed.
     MAX_ARTICLES_PER_ARTIST = 2
+
+    # RapidConnect Firestore config for EPK resolution
+    RC_PROJECT_ID = os.getenv("RC_FIREBASE_PROJECT_ID", "subway-musician-564bd")
+    RC_API_KEY = os.getenv("RC_FIREBASE_API_KEY", "AIzaSyBtR-kmZULXQZu3M9Zgi1LIUqKECklofOw")
+    RC_BASE_URL = "https://rapidconnect.minyvinyl.com/artists"
 
     def __init__(self):
         self.existing_source_urls: Set[str] = set()
@@ -225,6 +232,8 @@ class RSSScraper:
         )
         self.perplexity_disabled = False
         self.storage_upload_disabled = False
+        # Cache: lowercase artist name → (identifier, epk_url) or None
+        self._epk_cache: Dict[str, Optional[Tuple[str, str]]] = {}
 
     def _log_event(self, event: str, level: str = "info", **data: object) -> None:
         self.events.append(
@@ -236,6 +245,86 @@ class RSSScraper:
                 "data": data,
             }
         )
+
+    def resolve_epk(self, artist_names: List[str]) -> Tuple[str, str]:
+        """Resolve artist names against RapidConnect Firestore.
+
+        Returns (epk_url, epk_status) for the first matched artist.
+        Queries by name_lw field (lowercase artist name).
+        Results are cached per run to avoid repeated API calls.
+        """
+        if not self.RC_API_KEY or not artist_names:
+            return ("", "missing")
+
+        for name in artist_names:
+            key = name.lower().strip()
+            if not key:
+                continue
+
+            # Check cache first
+            if key in self._epk_cache:
+                cached = self._epk_cache[key]
+                if cached:
+                    return cached
+                continue
+
+            # Query RapidConnect Firestore for matching artist
+            try:
+                rc_url = (
+                    f"https://firestore.googleapis.com/v1/projects/{self.RC_PROJECT_ID}"
+                    f"/databases/(default)/documents:runQuery?key={self.RC_API_KEY}"
+                )
+                query_payload = {
+                    "structuredQuery": {
+                        "from": [{"collectionId": "musicians"}],
+                        "where": {
+                            "fieldFilter": {
+                                "field": {"fieldPath": "name_lw"},
+                                "op": "EQUAL",
+                                "value": {"stringValue": key},
+                            }
+                        },
+                        "select": {
+                            "fields": [
+                                {"fieldPath": "identifier"},
+                                {"fieldPath": "name_lw"},
+                            ]
+                        },
+                        "limit": 1,
+                    }
+                }
+
+                resp = self.session.post(rc_url, json=query_payload, timeout=8)
+                if resp.status_code == 200:
+                    results = resp.json()
+                    if results and isinstance(results, list):
+                        for doc_result in results:
+                            doc = doc_result.get("document")
+                            if doc:
+                                fields = doc.get("fields", {})
+                                identifier = (
+                                    fields.get("identifier", {}).get("stringValue", "")
+                                    or doc["name"].split("/")[-1]
+                                )
+                                epk_url = f"{self.RC_BASE_URL}/{identifier}"
+                                self._epk_cache[key] = (epk_url, "ready")
+                                print(f"    ✓ EPK found: {name} → {identifier}")
+                                self._log_event(
+                                    "epk_resolved",
+                                    artist=name,
+                                    identifier=identifier,
+                                    epk_url=epk_url,
+                                )
+                                return (epk_url, "ready")
+
+                # No match found for this artist
+                self._epk_cache[key] = None
+
+            except Exception as e:
+                print(f"    ⚠ EPK lookup failed for {name}: {e}")
+                self._epk_cache[key] = None
+
+        return ("", "missing")
 
     def _flush_artifacts(self, summary: Dict[str, object]) -> None:
         try:
@@ -1623,6 +1712,7 @@ Headline:"""
                     artist_names=artists,
                     primary_genre=primary_genre,
                 )
+                epk_url, epk_status = self.resolve_epk(artists)
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
@@ -1644,6 +1734,8 @@ Headline:"""
                     fetched_at=datetime.now(),
                     image_source=image_source,
                     location=item.get("location", ""),
+                    epk_url=epk_url,
+                    epk_status=epk_status,
                 )
 
                 if self.save_to_firebase(article):
@@ -1831,6 +1923,7 @@ Headline:"""
                     artist_names=artists,
                     primary_genre=primary_genre,
                 )
+                epk_url, epk_status = self.resolve_epk(artists)
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
@@ -1851,6 +1944,8 @@ Headline:"""
                     view_count=0,
                     fetched_at=datetime.now(),
                     image_source=image_source,
+                    epk_url=epk_url,
+                    epk_status=epk_status,
                 )
 
                 if self.save_to_firebase(article):
@@ -2092,6 +2187,7 @@ Headline:"""
                     artist_names=artists,
                     primary_genre=primary_genre,
                 )
+                epk_url, epk_status = self.resolve_epk(artists)
 
                 source_label = self._outlet_name_from_url(item["link"])
 
@@ -2114,6 +2210,8 @@ Headline:"""
                     view_count=0,
                     fetched_at=datetime.now(),
                     image_source=image_source,
+                    epk_url=epk_url,
+                    epk_status=epk_status,
                 )
 
                 if self.save_to_firebase(article):
@@ -2196,6 +2294,7 @@ Headline:"""
                     artist_names=artists,
                     primary_genre=primary_genre,
                 )
+                epk_url, epk_status = self.resolve_epk(artists)
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
@@ -2216,6 +2315,8 @@ Headline:"""
                     view_count=0,
                     fetched_at=datetime.now(),
                     image_source=image_source,
+                    epk_url=epk_url,
+                    epk_status=epk_status,
                 )
 
                 if self.save_to_firebase(article):

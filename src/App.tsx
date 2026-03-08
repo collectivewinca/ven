@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
-import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause, Sun, Moon } from 'lucide-react';
+import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause, Sun, Moon, Disc } from 'lucide-react';
 import { LazyArticleImage } from './components/LazyArticleImage';
 import { ArticleSkeleton } from './components/ArticleSkeleton';
 import { Toast } from './components/Toast';
@@ -85,7 +85,7 @@ function App() {
         'title', 'summary', 'source', 'source_url', 'primary_genre',
         'secondary_genres', 'artist_names', 'image_source',
         'published_at', 'read_time', 'share_count', 'email_count',
-        'bookmark_count', 'view_count', 'location'
+        'bookmark_count', 'view_count', 'location', 'epk_url', 'epk_status'
       ];
 
       let allDocs: any[] = [];
@@ -150,7 +150,9 @@ function App() {
           bookmarkCount: getField(fields.bookmark_count) || 0,
           viewCount: getField(fields.view_count) || 0,
           isBookmarked: false,
-          location: getField(fields.location) || ''
+          location: getField(fields.location) || '',
+          epkUrl: getField(fields.epk_url) || '',
+          epkStatus: getField(fields.epk_status) || 'missing',
         };
       });
 
@@ -657,6 +659,20 @@ function App() {
         >
           <Share2 style={fluidIcon} />
         </button>
+
+        {currentArticle.epkStatus === 'ready' && currentArticle.epkUrl && (
+          <a
+            href={currentArticle.epkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl transition-all duration-200 flex items-center justify-center"
+            style={{ ...fluidBtn, background: 'rgba(6, 182, 212, 0.12)', color: '#06b6d4' }}
+            onClick={() => trackEvent('epk_click', currentArticle.id)}
+            aria-label="View artist EPK on RapidConnect"
+          >
+            <Disc style={fluidIcon} />
+          </a>
+        )}
 
         <button
           onClick={handleListen}
