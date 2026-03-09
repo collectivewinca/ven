@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
-import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause, Sun, Moon, Disc } from 'lucide-react';
+<<<<<<< Updated upstream
+import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause, Sun, Moon, Disc, Disc3 } from 'lucide-react';
 import { LazyArticleImage } from './components/LazyArticleImage';
 import { ArticleSkeleton } from './components/ArticleSkeleton';
 import { Toast } from './components/Toast';
@@ -21,6 +22,8 @@ function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
+  const [touchEndX, setTouchEndX] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
@@ -201,6 +204,20 @@ function App() {
     : articles.filter(a => a.primaryGenre === selectedGenre);
 
   const currentArticle = filteredArticles[currentIndex];
+
+  const resolveArticleEpkUrl = useCallback((article?: MusicNewsArticle | null): string | null => {
+    if (!epkReady || !article) return null;
+    return getEpkUrl(article.artistNames) || findEpkInText(`${article.title} ${article.summary}`);
+  }, [epkReady, getEpkUrl, findEpkInText]);
+
+  const featuredArticleIndex = useMemo(() => {
+    if (!epkReady) return -1;
+    return filteredArticles.findIndex((article) => !!resolveArticleEpkUrl(article));
+  }, [epkReady, filteredArticles, resolveArticleEpkUrl]);
+
+  const currentArticleEpkUrl = useMemo(() => {
+    return resolveArticleEpkUrl(currentArticle);
+  }, [currentArticle, resolveArticleEpkUrl]);
 
   // ---------- Audio ----------
 
@@ -431,8 +448,11 @@ function App() {
   // ---------- Touch handlers ----------
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
+    const touchX = e.targetTouches[0].clientX;
     const touchY = e.targetTouches[0].clientY;
+    setTouchEndX(null);
     setTouchEnd(null);
+    setTouchStartX(touchX);
     setTouchStart(touchY);
     setIsDragging(true);
 
@@ -442,7 +462,9 @@ function App() {
   }, []);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
+    const touchX = e.targetTouches[0].clientX;
     const touchY = e.targetTouches[0].clientY;
+    setTouchEndX(touchX);
     setTouchEnd(touchY);
 
     if (isPulling && touchStart && containerRef.current?.scrollTop === 0) {
@@ -469,13 +491,15 @@ function App() {
     }
     setPullDistance(0);
 
-    if (!touchStart || !touchEnd) {
+    if (!touchStart || !touchEnd || touchStartX === null || touchEndX === null) {
       if (contentRef.current) contentRef.current.style.transform = '';
       return;
     }
 
-    const distance = touchStart - touchEnd;
-    const minSwipeDistance = 50;
+    const verticalDistance = touchStart - touchEnd;
+    const horizontalDistance = Math.abs(touchStartX - touchEndX);
+    const minSwipeDistance = 110;
+    const dominantVerticalSwipe = Math.abs(verticalDistance) > horizontalDistance * 1.35;
 
     if (contentRef.current) {
       contentRef.current.style.transform = '';
@@ -485,12 +509,12 @@ function App() {
       }, 300);
     }
 
-    if (distance > minSwipeDistance) {
+    if (dominantVerticalSwipe && verticalDistance > minSwipeDistance) {
       handleSwipe('up');
-    } else if (distance < -minSwipeDistance) {
+    } else if (dominantVerticalSwipe && verticalDistance < -minSwipeDistance) {
       handleSwipe('down');
     }
-  }, [touchStart, touchEnd, pullDistance, handleSwipe, fetchArticles, selectedGenre]);
+  }, [touchStart, touchEnd, touchStartX, touchEndX, pullDistance, handleSwipe, fetchArticles, selectedGenre]);
 
   // ---------- Keyboard & effects ----------
 
@@ -511,6 +535,26 @@ function App() {
   useEffect(() => {
     setCurrentIndex(0);
   }, [selectedGenre]);
+
+  useEffect(() => {
+    if (filteredArticles.length === 0) {
+      if (currentIndex !== 0) setCurrentIndex(0);
+      return;
+    }
+
+    if (currentIndex >= filteredArticles.length) {
+      setCurrentIndex(0);
+      return;
+    }
+
+    if (currentIndex !== 0 || featuredArticleIndex <= 0) {
+      return;
+    }
+
+    if (!resolveArticleEpkUrl(filteredArticles[0])) {
+      setCurrentIndex(featuredArticleIndex);
+    }
+  }, [currentIndex, featuredArticleIndex, filteredArticles, resolveArticleEpkUrl]);
 
   useEffect(() => {
     return () => stopAudio();
@@ -635,7 +679,27 @@ function App() {
   const renderActions = () => {
     if (!currentArticle) return null;
     return (
-          <div className="flex items-center" style={fluidGap}>
+          <div className="flex items-center flex-wrap" style={fluidGap}>
+        {currentArticleEpkUrl && (
+          <a
+            href={currentArticleEpkUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl transition-all duration-200 btn-press flex items-center justify-center"
+            style={{
+              ...fluidBtn,
+              background: 'linear-gradient(135deg, rgba(99,102,241,0.22), rgba(236,72,153,0.18))',
+              color: 'var(--text-primary)',
+              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
+            }}
+            onClick={() => trackEvent('discover_artist', currentArticle.id)}
+            aria-label="Discover artist"
+            title="Discover artist"
+          >
+            <Disc3 style={fluidIcon} />
+          </a>
+        )}
+
         <button
           onClick={() => toggleBookmark(currentArticle.id)}
           className={`rounded-xl transition-all duration-200 btn-press flex items-center justify-center ${
@@ -930,20 +994,6 @@ function App() {
                     {currentArticle.summary}
                   </p>
 
-                  {(() => {
-                    const epkUrl = epkReady ? (getEpkUrl(currentArticle.artistNames) || findEpkInText(currentArticle.title + ' ' + currentArticle.summary)) : null;
-                    return epkUrl ? (
-                      <a
-                        href={epkUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 self-start px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em]"
-                        style={{ background: 'var(--accent, #6366f1)', color: '#fff', textDecoration: 'none' }}
-                      >
-                        Discover Artist <ExternalLink size={10} />
-                      </a>
-                    ) : null;
-                  })()}
                 </div>
               </div>
 
@@ -1011,24 +1061,6 @@ function App() {
                     <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                       <span className="text-[10px] uppercase tracking-[0.16em] font-medium" style={{ color: 'var(--text-muted)' }}>
                         {new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        {(() => {
-                          const epkUrl = epkReady ? (getEpkUrl(currentArticle.artistNames) || findEpkInText(currentArticle.title + ' ' + currentArticle.summary)) : null;
-                          return epkUrl ? (
-                            <>
-                              <span className="mx-2.5" style={{ color: 'var(--text-faint)' }}>·</span>
-                              <a
-                                href={epkUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 font-bold"
-                                style={{ color: 'var(--accent, #6366f1)', textDecoration: 'none', letterSpacing: '0.08em' }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                Discover Artist <ExternalLink size={9} />
-                              </a>
-                            </>
-                          ) : null;
-                        })()}
                       </span>
                       {renderActions()}
                     </div>
