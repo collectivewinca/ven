@@ -1188,8 +1188,8 @@ function App() {
                   {articles.filter(a => bookmarks.includes(a.id)).map((article, index) => (
                     <div
                       key={article.id}
-                      className="group p-4 rounded-2xl bg-white/[0.04] hover:bg-white/[0.07] cursor-pointer transition-all duration-200 animate-slide-in-up"
-                      style={{ animationDelay: `${index * 50}ms` }}
+                      className="group p-4 rounded-2xl cursor-pointer transition-all duration-200 animate-slide-in-up"
+                      style={{ animationDelay: `${index * 50}ms`, background: 'var(--card-bg-hover)' }}
                       onClick={() => {
                         const idx = articles.findIndex(a => a.id === article.id);
                         setCurrentIndex(idx);
