@@ -674,16 +674,16 @@ function App() {
       <div className="flex items-center justify-center gap-1.5 py-3 safe-area-bottom">
         {dots.map((dot, i) =>
           dot === 'ellipsis' ? (
-            <span key={`e${i}`} className="w-1 h-1 rounded-full bg-white/20" />
+            <span key={`e${i}`} className="w-1 h-1 rounded-full" style={{ background: 'var(--text-faint)' }} />
           ) : (
             <button
               key={dot}
               onClick={() => setCurrentIndex(dot)}
-              className={`rounded-full transition-all duration-300 ${
-                dot === currentIndex
-                  ? 'w-2.5 h-2.5 bg-white'
-                  : 'w-1.5 h-1.5 bg-white/30 hover:bg-white/50'
-              }`}
+              className="rounded-full transition-all duration-300"
+              style={dot === currentIndex
+                ? { width: '10px', height: '10px', background: 'var(--text-primary)' }
+                : { width: '6px', height: '6px', background: 'var(--text-muted)' }
+              }
               aria-label={`Go to article ${dot + 1}`}
             />
           )
@@ -838,8 +838,8 @@ function App() {
         <div className="flex items-center justify-between" style={{ padding: 'clamp(0.5rem, 0.4rem + 0.5vw, 0.875rem) clamp(1rem, 0.75rem + 1vw, 2rem)' }}>
           <div className="flex items-center" style={{ gap: 'clamp(0.625rem, 0.5rem + 0.3vw, 0.75rem)' }}>
             <div
-              className="rounded-xl bg-white/[0.07] flex items-center justify-center overflow-hidden border border-white/[0.08]"
-              style={{ width: 'clamp(32px, 28px + 0.8vw, 44px)', height: 'clamp(32px, 28px + 0.8vw, 44px)' }}
+              className="rounded-xl flex items-center justify-center overflow-hidden"
+              style={{ width: 'clamp(32px, 28px + 0.8vw, 44px)', height: 'clamp(32px, 28px + 0.8vw, 44px)', background: 'var(--action-bg)', border: '1px solid var(--border-subtle)' }}
             >
               <img src="/branding/minylogo.png" alt="miny y0" className="object-contain" style={{ width: 'clamp(24px, 20px + 0.8vw, 36px)', height: 'clamp(24px, 20px + 0.8vw, 36px)' }} />
             </div>
