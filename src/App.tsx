@@ -26,6 +26,7 @@ function App() {
   const [isDragging, setIsDragging] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const { ready: epkReady, getEpkUrl, findEpkInText } = useArtistEpk();
@@ -530,6 +531,38 @@ function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSwipe]);
+
+  // Desktop detection
+  useEffect(() => {
+    const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024);
+    checkDesktop();
+    window.addEventListener('resize', checkDesktop);
+    return () => window.removeEventListener('resize', checkDesktop);
+  }, []);
+
+  // Mouse wheel scrolling for desktop
+  useEffect(() => {
+    if (!isDesktop || !containerRef.current) return;
+
+    const container = containerRef.current;
+    let isScrolling = false;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (isScrolling) return;
+      isScrolling = true;
+
+      if (e.deltaY > 20) {
+        handleSwipe('up');
+      } else if (e.deltaY < -20) {
+        handleSwipe('down');
+      }
+
+      setTimeout(() => { isScrolling = false; }, 400);
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: true });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [isDesktop, handleSwipe]);
 
   useEffect(() => {
     setCurrentIndex(0);
