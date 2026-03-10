@@ -762,7 +762,7 @@ function App() {
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-xl transition-all duration-200 flex items-center justify-center"
-            style={{ ...fluidBtn, background: 'rgba(6, 182, 212, 0.12)', color: '#06b6d4' }}
+            style={{ ...fluidBtn, background: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4' }}
             onClick={() => trackEvent('epk_click', currentArticle.id)}
             aria-label="View artist EPK on RapidConnect"
           >
@@ -1072,8 +1072,8 @@ function App() {
                       </div>
                       <h2
                         onClick={() => toggleBookmark(currentArticle.id)}
-                        className="font-display font-extrabold tracking-[-0.025em] leading-[1.08] text-white cursor-pointer select-none hover:text-white/90 transition-colors drop-shadow-[0_2px_16px_rgba(0,0,0,0.4)]"
-                        style={{ fontSize: 'clamp(1.5rem, 1.2rem + 1.5vw, 2.5rem)' }}
+                        className="font-display font-extrabold tracking-[-0.025em] leading-[1.08] cursor-pointer select-none transition-colors drop-shadow-[0_2px_16px_rgba(0,0,0,0.4)]"
+                        style={{ fontSize: 'clamp(1.5rem, 1.2rem + 1.5vw, 2.5rem)', color: 'var(--text-primary)' }}
                       >
                         {currentArticle.title}
                         {bookmarks.includes(currentArticle.id) && (
@@ -1135,8 +1135,8 @@ function App() {
                             </span>
                           </div>
                           <div style={{ padding: 'clamp(0.625rem, 0.5rem + 0.3vw, 0.875rem) clamp(0.75rem, 0.6rem + 0.3vw, 1rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.25rem, 0.2rem + 0.15vw, 0.5rem)' }}>
-                            <p className="font-display font-bold leading-snug text-white/90 line-clamp-2 tracking-[-0.01em]" style={{ fontSize: 'clamp(12px, 11px + 0.2vw, 15px)' }}>{article.title}</p>
-                            <p className="uppercase tracking-[0.12em] text-white/25 font-medium" style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)' }}>{article.source}</p>
+                            <p className="font-display font-bold leading-snug line-clamp-2 tracking-[-0.01em]" style={{ fontSize: 'clamp(12px, 11px + 0.2vw, 15px)', color: 'var(--text-primary)' }}>{article.title}</p>
+                            <p className="uppercase tracking-[0.12em] font-medium" style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)', color: 'var(--text-muted)' }}>{article.source}</p>
                           </div>
                         </button>
                       );
@@ -1156,31 +1156,32 @@ function App() {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowBookmarks(false)}
           />
-          <div className="absolute right-0 top-0 bottom-0 w-full sm:max-w-md bg-[#08080d] border-l border-white/[0.06] animate-slide-in-up flex flex-col">
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06] shrink-0">
+          <div className="absolute right-0 top-0 bottom-0 w-full sm:max-w-md animate-slide-in-up flex flex-col" style={{ background: 'var(--bg-drawer)', borderLeft: '1px solid var(--border-subtle)' }}>
+            <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <div>
-                <h2 className="font-display text-lg font-bold">Bookmarks</h2>
-                <p className="text-[11px] text-white/30 mt-0.5">
+                <h2 className="font-display text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Bookmarks</h2>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}">
                   {bookmarks.length} {bookmarks.length === 1 ? 'article' : 'articles'} saved
                 </p>
               </div>
               <button
                 onClick={() => setShowBookmarks(false)}
-                className="p-2 rounded-full hover:bg-white/[0.08] transition-all min-w-[36px] min-h-[36px] flex items-center justify-center"
+                className="p-2 rounded-full transition-all min-w-[36px] min-h-[36px] flex items-center justify-center"
+                style={{ background: 'var(--action-bg)' }}
                 aria-label="Close bookmarks"
               >
-                <X className="w-5 h-5 text-white/60" />
+                <X className="w-5 h-5" style={{ color: 'var(--text-secondary)' }} />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
               {bookmarks.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center">
-                  <div className="w-16 h-16 rounded-full bg-white/[0.04] flex items-center justify-center mb-4">
-                    <Bookmark className="w-8 h-8 text-white/15" />
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--skeleton-base)' }}>
+                    <Bookmark className="w-8 h-8" style={{ color: 'var(--text-faint)' }} />
                   </div>
-                  <p className="text-white/60 text-base font-medium mb-2">No bookmarks yet</p>
-                  <p className="text-white/35 text-sm">Articles you bookmark will appear here</p>
+                  <p className="text-base font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>No bookmarks yet</p>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Articles you bookmark will appear here</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1200,10 +1201,10 @@ function App() {
                           <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider mb-2 bg-gradient-to-r ${genreGradient(article.primaryGenre)} text-white`}>
                             {article.primaryGenre}
                           </span>
-                          <h3 className="text-white text-sm font-semibold leading-snug mb-1.5 line-clamp-2">
+                          <h3 className="text-sm font-semibold leading-snug mb-1.5 line-clamp-2" style={{ color: 'var(--text-primary)' }}>
                             {article.title}
                           </h3>
-                          <p className="text-white/45 text-xs line-clamp-2 font-light">
+                          <p className="text-xs line-clamp-2 font-light" style={{ color: 'var(--text-secondary)' }}>
                             {article.summary}
                           </p>
                         </div>
@@ -1212,7 +1213,8 @@ function App() {
                             e.stopPropagation();
                             toggleBookmark(article.id);
                           }}
-                          className="p-2 rounded-full bg-white/[0.04] hover:bg-red-500/20 text-white/30 hover:text-red-400 transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 min-w-[32px] min-h-[32px] flex items-center justify-center shrink-0"
+                          className="p-2 rounded-full transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 min-w-[32px] min-h-[32px] flex items-center justify-center shrink-0"
+                          style={{ background: 'var(--action-bg)', color: 'var(--text-muted)' }}
                           aria-label="Remove bookmark"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -1234,39 +1236,40 @@ function App() {
             className="absolute inset-0 bg-black/65 backdrop-blur-sm"
             onClick={() => setShowMenu(false)}
           />
-          <div className="absolute left-0 top-0 bottom-0 w-[84vw] max-w-sm bg-[#08080d] border-r border-white/[0.06] p-5 flex flex-col gap-6 animate-slide-in-left">
+          <div className="absolute left-0 top-0 bottom-0 w-[84vw] max-w-sm p-5 flex flex-col gap-6 animate-slide-in-left" style={{ background: 'var(--bg-drawer)', borderRight: '1px solid var(--border-subtle)' }}>
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/[0.12] flex items-center justify-center overflow-hidden">
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden" style={{ background: 'var(--action-bg)', border: '1px solid var(--border-subtle)' }}>
                   <img src="/branding/minylogo.png" alt="miny y0" className="w-8 h-8 object-contain" />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white tracking-tight">y0</p>
-                  <p className="text-[11px] text-white/40">brand menu</p>
+                  <p className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>y0</p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>brand menu</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowMenu(false)}
-                className="p-2 rounded-full hover:bg-white/[0.08]"
+                className="p-2 rounded-full transition-all"
+                style={{ background: 'var(--action-bg)' }}
                 aria-label="Close menu"
               >
-                <X className="w-4 h-4 text-white/60" />
+                <X className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
               </button>
             </div>
 
-            <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 flex items-center justify-between">
+            <div className="rounded-2xl p-4 flex items-center justify-between" style={{ border: '1px solid var(--border-subtle)', background: 'var(--card-bg)' }}>
               <div className="flex items-center gap-2">
                 <img src="/branding/minylogo.png" alt="Miny logo" className="h-8 w-auto object-contain" />
-                <span className="text-sm font-semibold text-white/90">miny</span>
+                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>miny</span>
               </div>
               <div className="flex items-center gap-2">
                 <img src="/branding/velab-logo.png" alt="VE Lab logo" className="h-8 w-auto object-contain opacity-90" />
-                <span className="text-sm font-semibold text-white/90">VE Lab</span>
+                <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>VE Lab</span>
               </div>
             </div>
 
             <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Explore</p>
+              <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>Explore</p>
               <nav className="space-y-2">
                 {[
                   { href: 'https://minyvinyl.com', name: 'Miny Vinyl', sub: 'Main platform', icon: <img src="/branding/minylogo.png" alt="" className="h-6 w-6 object-contain" /> },
@@ -1280,36 +1283,38 @@ function App() {
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between rounded-xl border border-white/[0.08] bg-white/[0.03] p-3 text-white/90 transition hover:bg-white/[0.08]"
+                    className="flex items-center justify-between rounded-xl border transition hover:scale-[1.01]"
+                    style={{ border: '1px solid var(--border-subtle)', background: 'var(--card-bg)', padding: '12px' }}
                     aria-label={`Open ${link.name}`}
                   >
                     <span className="flex items-center gap-3">
                       {link.icon}
                       <span>
-                        <span className="block text-sm font-semibold">{link.name}</span>
-                        <span className="block text-xs text-white/40">{link.sub}</span>
+                        <span className="block text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{link.name}</span>
+                        <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>{link.sub}</span>
                       </span>
                     </span>
-                    <ExternalLink className="h-4 w-4 text-white/30" />
+                    <ExternalLink className="h-4 w-4" style={{ color: 'var(--text-muted)' }} />
                   </a>
                 ))}
               </nav>
             </div>
 
             <div className="mt-auto space-y-2">
-              <p className="text-[11px] uppercase tracking-[0.14em] text-white/40">Actions</p>
-              <div className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-3">
+              <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>Actions</p>
+              <div className="rounded-2xl p-3" style={{ border: '1px solid var(--border-subtle)', background: 'var(--card-bg)' }}>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
                       setShowMenu(false);
                       setShowBookmarks(true);
                     }}
-                    className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.04] px-3 py-2.5 text-sm font-medium text-white/90 transition hover:bg-white/[0.08]"
+                    className="flex-1 rounded-xl px-3 py-2.5 text-sm font-medium transition"
+                    style={{ border: '1px solid var(--border-subtle)', background: 'var(--action-bg)', color: 'var(--text-primary)' }}
                     aria-label="Open bookmarks"
                   >
                     <span className="inline-flex items-center gap-2">
-                      <Bookmark className={`w-4 h-4 ${bookmarks.length > 0 ? 'text-amber-400 fill-amber-400' : 'text-white/60'}`} />
+                      <Bookmark className={`w-4 h-4 ${bookmarks.length > 0 ? 'text-amber-400 fill-amber-400' : ''}`} style={{ color: bookmarks.length > 0 ? '#f59e0b' : 'var(--text-secondary)' }} />
                       Bookmarks ({bookmarks.length})
                     </span>
                   </button>
@@ -1318,14 +1323,15 @@ function App() {
                       fetchArticles(selectedGenre);
                       setShowMenu(false);
                     }}
-                    className="rounded-xl border border-white/[0.08] bg-white/[0.04] p-2.5 text-white/60 transition hover:bg-white/[0.08]"
+                    className="rounded-xl p-2.5 transition"
+                    style={{ border: '1px solid var(--border-subtle)', background: 'var(--action-bg)', color: 'var(--text-secondary)' }}
                     aria-label="Refresh feed"
                   >
                     <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
               </div>
-              <p className="text-xs text-white/30">Live music headlines from the miny-ven VM scraper.</p>
+              <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Live music headlines from the miny-ven VM scraper.</p>
             </div>
           </div>
         </div>
