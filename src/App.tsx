@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
-import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause, Sun, Moon, Disc, Disc3 } from 'lucide-react';
+import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause, Sun, Moon, Disc } from 'lucide-react';
 import { LazyArticleImage } from './components/LazyArticleImage';
 import { ArticleSkeleton } from './components/ArticleSkeleton';
 import { Toast } from './components/Toast';
@@ -21,12 +21,9 @@ function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
-  const [touchEndX, setTouchEndX] = useState<number | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
-  const [isDesktop, setIsDesktop] = useState(false);
   const [audioLoading, setAudioLoading] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const { ready: epkReady, getEpkUrl, findEpkInText } = useArtistEpk();
@@ -72,6 +69,7 @@ function App() {
   const audioUrlRef = useRef<string | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const bedNodesRef = useRef<{ oscillators: OscillatorNode[]; gain: GainNode } | null>(null);
+  const wheelLockRef = useRef(false);
 
   // ---------- Data fetching ----------
 
@@ -204,20 +202,6 @@ function App() {
     : articles.filter(a => a.primaryGenre === selectedGenre);
 
   const currentArticle = filteredArticles[currentIndex];
-
-  const resolveArticleEpkUrl = useCallback((article?: MusicNewsArticle | null): string | null => {
-    if (!epkReady || !article) return null;
-    return getEpkUrl(article.artistNames) || findEpkInText(`${article.title} ${article.summary}`);
-  }, [epkReady, getEpkUrl, findEpkInText]);
-
-  const featuredArticleIndex = useMemo(() => {
-    if (!epkReady) return -1;
-    return filteredArticles.findIndex((article) => !!resolveArticleEpkUrl(article));
-  }, [epkReady, filteredArticles, resolveArticleEpkUrl]);
-
-  const currentArticleEpkUrl = useMemo(() => {
-    return resolveArticleEpkUrl(currentArticle);
-  }, [currentArticle, resolveArticleEpkUrl]);
 
   // ---------- Audio ----------
 
@@ -354,6 +338,20 @@ function App() {
     }
   }, [currentIndex, filteredArticles.length, currentArticle, trackEvent]);
 
+  const handleDesktopNavigate = useCallback((direction: 'next' | 'prev') => {
+    if (!filteredArticles.length) return;
+
+    if (direction === 'next' && currentIndex < filteredArticles.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+      if (currentArticle) trackEvent('desktop_next', currentArticle.id);
+    }
+
+    if (direction === 'prev' && currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+      if (currentArticle) trackEvent('desktop_prev', currentArticle.id);
+    }
+  }, [currentArticle, currentIndex, filteredArticles.length, trackEvent]);
+
   const toggleBookmark = useCallback((articleId: string) => {
     setBookmarks(prev => {
       const isBookmarked = prev.includes(articleId);
@@ -448,11 +446,8 @@ function App() {
   // ---------- Touch handlers ----------
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
-    const touchX = e.targetTouches[0].clientX;
     const touchY = e.targetTouches[0].clientY;
-    setTouchEndX(null);
     setTouchEnd(null);
-    setTouchStartX(touchX);
     setTouchStart(touchY);
     setIsDragging(true);
 
@@ -462,9 +457,7 @@ function App() {
   }, []);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
-    const touchX = e.targetTouches[0].clientX;
     const touchY = e.targetTouches[0].clientY;
-    setTouchEndX(touchX);
     setTouchEnd(touchY);
 
     if (isPulling && touchStart && containerRef.current?.scrollTop === 0) {
@@ -491,15 +484,13 @@ function App() {
     }
     setPullDistance(0);
 
-    if (!touchStart || !touchEnd || touchStartX === null || touchEndX === null) {
+    if (!touchStart || !touchEnd) {
       if (contentRef.current) contentRef.current.style.transform = '';
       return;
     }
 
-    const verticalDistance = touchStart - touchEnd;
-    const horizontalDistance = Math.abs(touchStartX - touchEndX);
-    const minSwipeDistance = 110;
-    const dominantVerticalSwipe = Math.abs(verticalDistance) > horizontalDistance * 1.35;
+    const distance = touchStart - touchEnd;
+    const minSwipeDistance = 50;
 
     if (contentRef.current) {
       contentRef.current.style.transform = '';
@@ -509,19 +500,19 @@ function App() {
       }, 300);
     }
 
-    if (dominantVerticalSwipe && verticalDistance > minSwipeDistance) {
+    if (distance > minSwipeDistance) {
       handleSwipe('up');
-    } else if (dominantVerticalSwipe && verticalDistance < -minSwipeDistance) {
+    } else if (distance < -minSwipeDistance) {
       handleSwipe('down');
     }
-  }, [touchStart, touchEnd, touchStartX, touchEndX, pullDistance, handleSwipe, fetchArticles, selectedGenre]);
+  }, [touchStart, touchEnd, pullDistance, handleSwipe, fetchArticles, selectedGenre]);
 
   // ---------- Keyboard & effects ----------
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowUp') handleSwipe('down');
-      if (e.key === 'ArrowDown') handleSwipe('up');
+      if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') handleDesktopNavigate('prev');
+      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') handleDesktopNavigate('next');
       if (e.key === 'b') setShowBookmarks(prev => !prev);
       if (e.key === 'Escape') {
         setShowBookmarks(false);
@@ -530,63 +521,34 @@ function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleSwipe]);
+  }, [handleDesktopNavigate]);
 
-  // Desktop detection
   useEffect(() => {
-    const checkDesktop = () => setIsDesktop(window.innerWidth >= 1024);
-    checkDesktop();
-    window.addEventListener('resize', checkDesktop);
-    return () => window.removeEventListener('resize', checkDesktop);
-  }, []);
-
-  // Mouse wheel scrolling for desktop
-  useEffect(() => {
-    if (!isDesktop || !containerRef.current) return;
-
-    const container = containerRef.current;
-    let isScrolling = false;
-
     const handleWheel = (e: WheelEvent) => {
-      if (isScrolling) return;
-      isScrolling = true;
+      if (window.innerWidth < 768) return;
+      if (showBookmarks || showMenu || loading || filteredArticles.length <= 1) return;
 
-      if (e.deltaY > 20) {
-        handleSwipe('up');
-      } else if (e.deltaY < -20) {
-        handleSwipe('down');
-      }
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('aside')) return;
 
-      setTimeout(() => { isScrolling = false; }, 400);
+      if (Math.abs(e.deltaY) < 24 || wheelLockRef.current) return;
+
+      wheelLockRef.current = true;
+      if (e.deltaY > 0) handleDesktopNavigate('next');
+      else handleDesktopNavigate('prev');
+
+      window.setTimeout(() => {
+        wheelLockRef.current = false;
+      }, 420);
     };
 
-    container.addEventListener('wheel', handleWheel, { passive: true });
-    return () => container.removeEventListener('wheel', handleWheel);
-  }, [isDesktop, handleSwipe]);
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [filteredArticles.length, handleDesktopNavigate, loading, showBookmarks, showMenu]);
 
   useEffect(() => {
     setCurrentIndex(0);
   }, [selectedGenre]);
-
-  useEffect(() => {
-    if (filteredArticles.length === 0) {
-      if (currentIndex !== 0) setCurrentIndex(0);
-      return;
-    }
-
-    if (currentIndex >= filteredArticles.length) {
-      setCurrentIndex(0);
-      return;
-    }
-
-    if (currentIndex !== 0 || featuredArticleIndex <= 0) {
-      return;
-    }
-
-    if (!resolveArticleEpkUrl(filteredArticles[0])) {
-      setCurrentIndex(featuredArticleIndex);
-    }
-  }, [currentIndex, featuredArticleIndex, filteredArticles, resolveArticleEpkUrl]);
 
   useEffect(() => {
     return () => stopAudio();
@@ -674,16 +636,16 @@ function App() {
       <div className="flex items-center justify-center gap-1.5 py-3 safe-area-bottom">
         {dots.map((dot, i) =>
           dot === 'ellipsis' ? (
-            <span key={`e${i}`} className="w-1 h-1 rounded-full" style={{ background: 'var(--text-faint)' }} />
+            <span key={`e${i}`} className="w-1 h-1 rounded-full bg-white/20" />
           ) : (
             <button
               key={dot}
               onClick={() => setCurrentIndex(dot)}
-              className="rounded-full transition-all duration-300"
-              style={dot === currentIndex
-                ? { width: '10px', height: '10px', background: 'var(--text-primary)' }
-                : { width: '6px', height: '6px', background: 'var(--text-muted)' }
-              }
+              className={`rounded-full transition-all duration-300 ${
+                dot === currentIndex
+                  ? 'w-2.5 h-2.5 bg-white'
+                  : 'w-1.5 h-1.5 bg-white/30 hover:bg-white/50'
+              }`}
               aria-label={`Go to article ${dot + 1}`}
             />
           )
@@ -711,27 +673,7 @@ function App() {
   const renderActions = () => {
     if (!currentArticle) return null;
     return (
-          <div className="flex items-center flex-wrap" style={fluidGap}>
-        {currentArticleEpkUrl && (
-          <a
-            href={currentArticleEpkUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-xl transition-all duration-200 btn-press flex items-center justify-center"
-            style={{
-              ...fluidBtn,
-              background: 'linear-gradient(135deg, rgba(99,102,241,0.22), rgba(236,72,153,0.18))',
-              color: 'var(--text-primary)',
-              boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.08)',
-            }}
-            onClick={() => trackEvent('discover_artist', currentArticle.id)}
-            aria-label="Discover artist"
-            title="Discover artist"
-          >
-            <Disc3 style={fluidIcon} />
-          </a>
-        )}
-
+          <div className="flex items-center" style={fluidGap}>
         <button
           onClick={() => toggleBookmark(currentArticle.id)}
           className={`rounded-xl transition-all duration-200 btn-press flex items-center justify-center ${
@@ -762,7 +704,7 @@ function App() {
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-xl transition-all duration-200 flex items-center justify-center"
-            style={{ ...fluidBtn, background: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4' }}
+            style={{ ...fluidBtn, background: 'rgba(6, 182, 212, 0.12)', color: '#06b6d4' }}
             onClick={() => trackEvent('epk_click', currentArticle.id)}
             aria-label="View artist EPK on RapidConnect"
           >
@@ -838,8 +780,8 @@ function App() {
         <div className="flex items-center justify-between" style={{ padding: 'clamp(0.5rem, 0.4rem + 0.5vw, 0.875rem) clamp(1rem, 0.75rem + 1vw, 2rem)' }}>
           <div className="flex items-center" style={{ gap: 'clamp(0.625rem, 0.5rem + 0.3vw, 0.75rem)' }}>
             <div
-              className="rounded-xl flex items-center justify-center overflow-hidden"
-              style={{ width: 'clamp(32px, 28px + 0.8vw, 44px)', height: 'clamp(32px, 28px + 0.8vw, 44px)', background: 'var(--action-bg)', border: '1px solid var(--border-subtle)' }}
+              className="rounded-xl bg-white/[0.07] flex items-center justify-center overflow-hidden border border-white/[0.08]"
+              style={{ width: 'clamp(32px, 28px + 0.8vw, 44px)', height: 'clamp(32px, 28px + 0.8vw, 44px)' }}
             >
               <img src="/branding/minylogo.png" alt="miny y0" className="object-contain" style={{ width: 'clamp(24px, 20px + 0.8vw, 36px)', height: 'clamp(24px, 20px + 0.8vw, 36px)' }} />
             </div>
@@ -1025,6 +967,21 @@ function App() {
                   <p className="font-light leading-[1.6] tracking-[0.01em]" style={{ fontSize: 'clamp(0.8rem, 0.75rem + 0.5vw, 0.9rem)', color: 'var(--text-secondary)' }}>
                     {currentArticle.summary}
                   </p>
+
+                  {(() => {
+                    const epkUrl = epkReady ? (getEpkUrl(currentArticle.artistNames) || findEpkInText(currentArticle.title + ' ' + currentArticle.summary)) : null;
+                    return epkUrl ? (
+                      <a
+                        href={epkUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 self-start px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em]"
+                        style={{ background: 'var(--accent, #6366f1)', color: '#fff', textDecoration: 'none' }}
+                      >
+                        Discover Artist <ExternalLink size={10} />
+                      </a>
+                    ) : null;
+                  })()}
                 </div>
               </div>
 
@@ -1072,8 +1029,8 @@ function App() {
                       </div>
                       <h2
                         onClick={() => toggleBookmark(currentArticle.id)}
-                        className="font-display font-extrabold tracking-[-0.025em] leading-[1.08] cursor-pointer select-none transition-colors drop-shadow-[0_2px_16px_rgba(0,0,0,0.4)]"
-                        style={{ fontSize: 'clamp(1.5rem, 1.2rem + 1.5vw, 2.5rem)', color: 'var(--text-primary)' }}
+                        className="font-display font-extrabold tracking-[-0.025em] leading-[1.08] text-white cursor-pointer select-none hover:text-white/90 transition-colors drop-shadow-[0_2px_16px_rgba(0,0,0,0.4)]"
+                        style={{ fontSize: 'clamp(1.5rem, 1.2rem + 1.5vw, 2.5rem)' }}
                       >
                         {currentArticle.title}
                         {bookmarks.includes(currentArticle.id) && (
@@ -1092,6 +1049,24 @@ function App() {
                     <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
                       <span className="text-[10px] uppercase tracking-[0.16em] font-medium" style={{ color: 'var(--text-muted)' }}>
                         {new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {(() => {
+                          const epkUrl = epkReady ? (getEpkUrl(currentArticle.artistNames) || findEpkInText(currentArticle.title + ' ' + currentArticle.summary)) : null;
+                          return epkUrl ? (
+                            <>
+                              <span className="mx-2.5" style={{ color: 'var(--text-faint)' }}>·</span>
+                              <a
+                                href={epkUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 font-bold"
+                                style={{ color: 'var(--accent, #6366f1)', textDecoration: 'none', letterSpacing: '0.08em' }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Discover Artist <ExternalLink size={9} />
+                              </a>
+                            </>
+                          ) : null;
+                        })()}
                       </span>
                       {renderActions()}
                     </div>
@@ -1135,8 +1110,18 @@ function App() {
                             </span>
                           </div>
                           <div style={{ padding: 'clamp(0.625rem, 0.5rem + 0.3vw, 0.875rem) clamp(0.75rem, 0.6rem + 0.3vw, 1rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.25rem, 0.2rem + 0.15vw, 0.5rem)' }}>
-                            <p className="font-display font-bold leading-snug line-clamp-2 tracking-[-0.01em]" style={{ fontSize: 'clamp(12px, 11px + 0.2vw, 15px)', color: 'var(--text-primary)' }}>{article.title}</p>
-                            <p className="uppercase tracking-[0.12em] font-medium" style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)', color: 'var(--text-muted)' }}>{article.source}</p>
+                            <p
+                              className="font-display font-bold leading-snug line-clamp-2 tracking-[-0.01em]"
+                              style={{ fontSize: 'clamp(12px, 11px + 0.2vw, 15px)', color: 'var(--text-primary)' }}
+                            >
+                              {article.title}
+                            </p>
+                            <p
+                              className="uppercase tracking-[0.12em] font-medium"
+                              style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)', color: 'var(--text-quaternary)' }}
+                            >
+                              {article.source}
+                            </p>
                           </div>
                         </button>
                       );
@@ -1156,32 +1141,35 @@ function App() {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setShowBookmarks(false)}
           />
-          <div className="absolute right-0 top-0 bottom-0 w-full sm:max-w-md animate-slide-in-up flex flex-col" style={{ background: 'var(--bg-drawer)', borderLeft: '1px solid var(--border-subtle)' }}>
+          <div
+            className="absolute right-0 top-0 bottom-0 w-full sm:max-w-md animate-slide-in-up flex flex-col"
+            style={{ background: 'var(--bg-drawer)', borderLeft: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
+          >
             <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <div>
-                <h2 className="font-display text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Bookmarks</h2>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
+                <h2 className="font-display text-lg font-bold">Bookmarks</h2>
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-quaternary)' }}>
                   {bookmarks.length} {bookmarks.length === 1 ? 'article' : 'articles'} saved
                 </p>
               </div>
               <button
                 onClick={() => setShowBookmarks(false)}
                 className="p-2 rounded-full transition-all min-w-[36px] min-h-[36px] flex items-center justify-center"
-                style={{ background: 'var(--action-bg)' }}
+                style={{ color: 'var(--action-text)' }}
                 aria-label="Close bookmarks"
               >
-                <X className="w-5 h-5" style={{ color: 'var(--text-secondary)' }} />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 scrollbar-hide">
               {bookmarks.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center">
-                  <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--skeleton-base)' }}>
+                  <div className="w-16 h-16 rounded-full flex items-center justify-center mb-4" style={{ background: 'var(--action-bg)' }}>
                     <Bookmark className="w-8 h-8" style={{ color: 'var(--text-faint)' }} />
                   </div>
                   <p className="text-base font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>No bookmarks yet</p>
-                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Articles you bookmark will appear here</p>
+                  <p className="text-sm" style={{ color: 'var(--text-quaternary)' }}>Articles you bookmark will appear here</p>
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -1189,7 +1177,7 @@ function App() {
                     <div
                       key={article.id}
                       className="group p-4 rounded-2xl cursor-pointer transition-all duration-200 animate-slide-in-up"
-                      style={{ animationDelay: `${index * 50}ms`, background: 'var(--card-bg-hover)' }}
+                      style={{ background: 'var(--card-bg)', animationDelay: `${index * 50}ms` }}
                       onClick={() => {
                         const idx = articles.findIndex(a => a.id === article.id);
                         setCurrentIndex(idx);
@@ -1204,7 +1192,7 @@ function App() {
                           <h3 className="text-sm font-semibold leading-snug mb-1.5 line-clamp-2" style={{ color: 'var(--text-primary)' }}>
                             {article.title}
                           </h3>
-                          <p className="text-xs line-clamp-2 font-light" style={{ color: 'var(--text-secondary)' }}>
+                          <p className="text-xs line-clamp-2 font-light" style={{ color: 'var(--text-tertiary)' }}>
                             {article.summary}
                           </p>
                         </div>
@@ -1213,8 +1201,8 @@ function App() {
                             e.stopPropagation();
                             toggleBookmark(article.id);
                           }}
-                          className="p-2 rounded-full transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 min-w-[32px] min-h-[32px] flex items-center justify-center shrink-0"
-                          style={{ background: 'var(--action-bg)', color: 'var(--text-muted)' }}
+                          className="p-2 rounded-full hover:bg-red-500/20 hover:text-red-400 transition-all duration-200 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 min-w-[32px] min-h-[32px] flex items-center justify-center shrink-0"
+                          style={{ background: 'var(--action-bg)', color: 'var(--text-quaternary)' }}
                           aria-label="Remove bookmark"
                         >
                           <X className="w-3.5 h-3.5" />
@@ -1236,28 +1224,31 @@ function App() {
             className="absolute inset-0 bg-black/65 backdrop-blur-sm"
             onClick={() => setShowMenu(false)}
           />
-          <div className="absolute left-0 top-0 bottom-0 w-[84vw] max-w-sm p-5 flex flex-col gap-6 animate-slide-in-left" style={{ background: 'var(--bg-drawer)', borderRight: '1px solid var(--border-subtle)' }}>
+          <div
+            className="absolute left-0 top-0 bottom-0 w-[84vw] max-w-sm p-5 flex flex-col gap-6 animate-slide-in-left"
+            style={{ background: 'var(--bg-drawer)', borderRight: '1px solid var(--border-subtle)', color: 'var(--text-primary)' }}
+          >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden" style={{ background: 'var(--action-bg)', border: '1px solid var(--border-subtle)' }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center overflow-hidden" style={{ background: 'var(--action-bg)', border: '1px solid var(--border-primary)' }}>
                   <img src="/branding/minylogo.png" alt="miny y0" className="w-8 h-8 object-contain" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold tracking-tight" style={{ color: 'var(--text-primary)' }}>y0</p>
-                  <p className="text-[11px]" style={{ color: 'var(--text-muted)' }}>brand menu</p>
+                  <p className="text-[11px]" style={{ color: 'var(--text-quaternary)' }}>brand menu</p>
                 </div>
               </div>
               <button
                 onClick={() => setShowMenu(false)}
                 className="p-2 rounded-full transition-all"
-                style={{ background: 'var(--action-bg)' }}
+                style={{ color: 'var(--action-text)' }}
                 aria-label="Close menu"
               >
-                <X className="w-4 h-4" style={{ color: 'var(--text-secondary)' }} />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="rounded-2xl p-4 flex items-center justify-between" style={{ border: '1px solid var(--border-subtle)', background: 'var(--card-bg)' }}>
+            <div className="rounded-2xl p-4 flex items-center justify-between" style={{ border: '1px solid var(--border-primary)', background: 'var(--card-bg)' }}>
               <div className="flex items-center gap-2">
                 <img src="/branding/minylogo.png" alt="Miny logo" className="h-8 w-auto object-contain" />
                 <span className="text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>miny</span>
@@ -1269,7 +1260,7 @@ function App() {
             </div>
 
             <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>Explore</p>
+              <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-quaternary)' }}>Explore</p>
               <nav className="space-y-2">
                 {[
                   { href: 'https://minyvinyl.com', name: 'Miny Vinyl', sub: 'Main platform', icon: <img src="/branding/minylogo.png" alt="" className="h-6 w-6 object-contain" /> },
@@ -1283,26 +1274,26 @@ function App() {
                     href={link.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center justify-between rounded-xl border transition hover:scale-[1.01]"
-                    style={{ border: '1px solid var(--border-subtle)', background: 'var(--card-bg)', padding: '12px' }}
+                    className="flex items-center justify-between rounded-xl p-3 transition"
+                    style={{ border: '1px solid var(--border-primary)', background: 'var(--card-bg)', color: 'var(--text-primary)' }}
                     aria-label={`Open ${link.name}`}
                   >
                     <span className="flex items-center gap-3">
                       {link.icon}
                       <span>
-                        <span className="block text-sm font-semibold" style={{ color: 'var(--text-primary)' }}>{link.name}</span>
-                        <span className="block text-xs" style={{ color: 'var(--text-muted)' }}>{link.sub}</span>
+                        <span className="block text-sm font-semibold">{link.name}</span>
+                        <span className="block text-xs" style={{ color: 'var(--text-quaternary)' }}>{link.sub}</span>
                       </span>
                     </span>
-                    <ExternalLink className="h-4 w-4" style={{ color: 'var(--text-muted)' }} />
+                    <ExternalLink className="h-4 w-4" style={{ color: 'var(--text-quaternary)' }} />
                   </a>
                 ))}
               </nav>
             </div>
 
             <div className="mt-auto space-y-2">
-              <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-muted)' }}>Actions</p>
-              <div className="rounded-2xl p-3" style={{ border: '1px solid var(--border-subtle)', background: 'var(--card-bg)' }}>
+              <p className="text-[11px] uppercase tracking-[0.14em]" style={{ color: 'var(--text-quaternary)' }}>Actions</p>
+              <div className="rounded-2xl p-3" style={{ border: '1px solid var(--border-primary)', background: 'var(--card-bg)' }}>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
@@ -1310,11 +1301,11 @@ function App() {
                       setShowBookmarks(true);
                     }}
                     className="flex-1 rounded-xl px-3 py-2.5 text-sm font-medium transition"
-                    style={{ border: '1px solid var(--border-subtle)', background: 'var(--action-bg)', color: 'var(--text-primary)' }}
+                    style={{ border: '1px solid var(--border-primary)', background: 'var(--action-bg)', color: 'var(--text-primary)' }}
                     aria-label="Open bookmarks"
                   >
                     <span className="inline-flex items-center gap-2">
-                      <Bookmark className={`w-4 h-4 ${bookmarks.length > 0 ? 'text-amber-400 fill-amber-400' : ''}`} style={{ color: bookmarks.length > 0 ? '#f59e0b' : 'var(--text-secondary)' }} />
+                      <Bookmark className={`w-4 h-4 ${bookmarks.length > 0 ? 'text-amber-400 fill-amber-400' : ''}`} style={bookmarks.length > 0 ? undefined : { color: 'var(--action-text)' }} />
                       Bookmarks ({bookmarks.length})
                     </span>
                   </button>
@@ -1324,18 +1315,49 @@ function App() {
                       setShowMenu(false);
                     }}
                     className="rounded-xl p-2.5 transition"
-                    style={{ border: '1px solid var(--border-subtle)', background: 'var(--action-bg)', color: 'var(--text-secondary)' }}
+                    style={{ border: '1px solid var(--border-primary)', background: 'var(--action-bg)', color: 'var(--action-text)' }}
                     aria-label="Refresh feed"
                   >
                     <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
                   </button>
                 </div>
               </div>
-              <p className="text-xs" style={{ color: 'var(--text-faint)' }}>Live music headlines from the miny-ven VM scraper.</p>
+              <p className="text-xs" style={{ color: 'var(--text-quaternary)' }}>Live music headlines from the miny-ven VM scraper.</p>
             </div>
           </div>
         </div>
       )}
+
+      {/* ─── Footer (desktop only) ─── */}
+      <footer
+        className="hidden md:flex shrink-0 items-center justify-between z-10"
+        style={{ borderTop: '1px solid var(--border-subtle)', padding: '0.5rem clamp(1.25rem, 1rem + 1vw, 2rem)', color: 'var(--text-muted)' }}
+      >
+        <span className="font-display font-bold tracking-tight" style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+          MINY Indie News
+        </span>
+        <div className="flex items-center gap-4" style={{ fontSize: '10px' }}>
+          <a
+            href="https://minyvinyl.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-colors hover:underline"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            minyvinyl.com
+          </a>
+          <span style={{ color: 'var(--text-faint)' }}>·</span>
+          <a
+            href="https://velab.org"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-colors hover:underline"
+            style={{ color: 'var(--text-muted)' }}
+          >
+            velab.org
+          </a>
+        </div>
+      </footer>
 
       {/* ─── Toast ─── */}
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
