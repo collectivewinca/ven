@@ -1160,7 +1160,7 @@ function App() {
             <div className="flex items-center justify-between px-5 py-4 shrink-0" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
               <div>
                 <h2 className="font-display text-lg font-bold" style={{ color: 'var(--text-primary)' }}>Bookmarks</h2>
-                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}">
+                <p className="text-[11px] mt-0.5" style={{ color: 'var(--text-muted)' }}>
                   {bookmarks.length} {bookmarks.length === 1 ? 'article' : 'articles'} saved
                 </p>
               </div>
