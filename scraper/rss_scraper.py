@@ -69,6 +69,10 @@ NVIDIA_CHAT_MODEL = os.getenv("NVIDIA_CHAT_MODEL", "minimaxai/minimax-m2.5")
 NVIDIA_CHAT_URL = os.getenv(
     "NVIDIA_CHAT_URL", "https://integrate.api.nvidia.com/v1/chat/completions"
 )
+NVIDIA_IMAGE_URL = os.getenv(
+    "NVIDIA_IMAGE_URL",
+    "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3-medium",
+)
 if NVIDIA_API_KEY:
     print(f"✓ NVIDIA chat enabled (model: {NVIDIA_CHAT_MODEL})")
 else:
@@ -585,6 +589,86 @@ class RSSScraper:
             )
             return None
 
+    def _decode_nvidia_image_payload(self, image_field: str) -> Optional[bytes]:
+        """Decode NVIDIA image payload that may be raw base64 or a data URI."""
+        if not image_field:
+            return None
+        payload = image_field.strip()
+        if payload.startswith("data:"):
+            parts = payload.split(",", 1)
+            if len(parts) != 2:
+                return None
+            payload = parts[1]
+        try:
+            return base64.b64decode(payload)
+        except Exception:
+            return None
+
+    def _generate_nvidia_image(
+        self, title: str, artist: str, genre: str
+    ) -> Optional[str]:
+        """Generate image via NVIDIA SD3 endpoint and return uploaded/public image URL."""
+        if not NVIDIA_API_KEY:
+            return None
+
+        prompt = (
+            "Create a photorealistic editorial hero image for a music news card. "
+            "No text, no logo, no watermark, no collage. "
+            f"Artist focus: {artist or 'unknown artist'}. "
+            f"Genre context: {genre or 'mixed'}. "
+            f"Headline context: {title[:180]}."
+        )
+        try:
+            resp = self.session.post(
+                NVIDIA_IMAGE_URL,
+                headers={
+                    "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json={"prompt": prompt},
+                timeout=60,
+            )
+            if resp.status_code != 200:
+                self._log_event(
+                    "nvidia_image_generation_failed",
+                    level="warning",
+                    status_code=resp.status_code,
+                    error=resp.text[:300],
+                )
+                return None
+
+            data = resp.json()
+            if data.get("finish_reason") not in {"SUCCESS", "success"}:
+                self._log_event(
+                    "nvidia_image_generation_failed",
+                    level="warning",
+                    status=data.get("finish_reason", "unknown"),
+                )
+                return None
+
+            image_bytes = self._decode_nvidia_image_payload(data.get("image", ""))
+            if not image_bytes:
+                self._log_event(
+                    "nvidia_image_no_data",
+                    level="warning",
+                    finish_reason=data.get("finish_reason", "unknown"),
+                )
+                return None
+
+            self._log_event(
+                "nvidia_image_generation_ok",
+                seed=data.get("seed"),
+                size_kb=len(image_bytes) // 1024,
+            )
+            return self._compress_and_upload_bytes(image_bytes, title)
+        except Exception as e:
+            self._log_event(
+                "nvidia_image_generation_failed",
+                level="warning",
+                error=str(e),
+            )
+            return None
+
     def _generate_gemini_image(
         self, title: str, artist: str, genre: str
     ) -> Optional[str]:
@@ -793,6 +877,14 @@ class RSSScraper:
             artist_img = self._fetch_artist_image(artist_names[0])
             if artist_img:
                 return artist_img, "artist_api"
+
+        generated = self._generate_nvidia_image(
+            title,
+            artist_names[0] if artist_names else "",
+            primary_genre,
+        )
+        if generated:
+            return generated, "ai_generated_nvidia"
 
         generated = self._generate_gemini_image(
             title,
