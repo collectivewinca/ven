@@ -63,6 +63,17 @@ if GEMINI_API_KEY:
 else:
     print("⚠ GEMINI_API_KEY not set, AI image generation disabled")
 
+# NVIDIA NIM chat completions (optional — used for text generation)
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+NVIDIA_CHAT_MODEL = os.getenv("NVIDIA_CHAT_MODEL", "minimaxai/minimax-m2.5")
+NVIDIA_CHAT_URL = os.getenv(
+    "NVIDIA_CHAT_URL", "https://integrate.api.nvidia.com/v1/chat/completions"
+)
+if NVIDIA_API_KEY:
+    print(f"✓ NVIDIA chat enabled (model: {NVIDIA_CHAT_MODEL})")
+else:
+    print("⚠ NVIDIA_API_KEY not set, NVIDIA text generation disabled")
+
 # Firebase Storage (optional — used to persist AI-generated images)
 _storage_bucket = None
 FIREBASE_STORAGE_BUCKET = os.getenv(
@@ -799,17 +810,11 @@ class RSSScraper:
         if len(content.split()) < 40 and content.startswith("http"):
             content = self._fetch_article_text(content) or content
 
-        if not GEMINI_API_KEY:
+        if not NVIDIA_API_KEY and not GEMINI_API_KEY:
             words = content.split()
             if len(words) >= 60:
                 return " ".join(words[:60]) + "."
             return " ".join(words) + "." if words else title
-
-        GEMINI_SUMMARY_MODEL = "gemini-3-flash-preview"
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{GEMINI_SUMMARY_MODEL}:generateContent"
-        )
 
         prompt = f"""Write a 60-word music news summary. Count every word carefully — it must be between 55 and 65 words.
 
@@ -827,39 +832,13 @@ Rules:
 
 Your 60-word summary:"""
 
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "systemInstruction": {
-                "parts": [
-                    {
-                        "text": "You are a professional music journalist writing 60-word news briefs. Always write the full 60 words — never truncate early."
-                    }
-                ]
-            },
-            "generationConfig": {
-                "maxOutputTokens": 4096,
-                "temperature": 0.7,
-            },
-        }
-
         try:
-            response = requests.post(
-                url,
-                headers={
-                    "x-goog-api-key": GEMINI_API_KEY,
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+            summary = self._generate_text_response(
+                prompt=prompt,
+                system_prompt="You are a professional music journalist writing 60-word news briefs. Always write the full 60 words — never truncate early.",
+                temperature=0.7,
+                max_tokens=600,
                 timeout=30,
-            )
-            response.raise_for_status()
-            result = response.json()
-            summary = (
-                result.get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text", "")
-                .strip()
             )
 
             if (
@@ -882,7 +861,7 @@ Your 60-word summary:"""
 
             return summary
         except Exception as e:
-            print(f"  ⚠ Gemini summary error: {e}, using fallback")
+            print(f"  ⚠ Summary generation error: {e}, using fallback")
             words = content.split()
             return " ".join(words[:60]) + "." if words else title
 
@@ -890,10 +869,6 @@ Your 60-word summary:"""
         self, title: str, content: str, short_summary: str
     ) -> str:
         """If initial summary is too short, ask Gemini to expand it to 60 words."""
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"gemini-3-flash-preview:generateContent"
-        )
         prompt = f"""This summary is too short. Expand it to exactly 60 words.
 
 Title: {title}
@@ -901,29 +876,13 @@ Original article: {content[:1000]}
 Short draft: {short_summary}
 
 Rewrite as a full 60-word music news brief. Count each word. Return only the summary text."""
-
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"maxOutputTokens": 4096, "temperature": 0.6},
-        }
         try:
-            resp = requests.post(
-                url,
-                headers={
-                    "x-goog-api-key": GEMINI_API_KEY,
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+            expanded = self._generate_text_response(
+                prompt=prompt,
+                system_prompt="Expand short music-news drafts into complete 60-word briefs.",
+                temperature=0.6,
+                max_tokens=400,
                 timeout=20,
-            )
-            resp.raise_for_status()
-            expanded = (
-                resp.json()
-                .get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text", "")
-                .strip()
             )
             if expanded and len(expanded.split()) >= 40:
                 words = expanded.split()
@@ -1013,6 +972,75 @@ Rewrite as a full 60-word music news brief. Count each word. Return only the sum
         text = re.sub(r"\[[\d,\s]+\]", "", text)  # [1][2] → ""
         text = text.strip("\"'")
         return text.strip()
+
+    def _generate_text_response(
+        self,
+        prompt: str,
+        system_prompt: str,
+        temperature: float,
+        max_tokens: int,
+        timeout: int,
+    ) -> str:
+        """Generate text using NVIDIA first, with Gemini as fallback."""
+        if NVIDIA_API_KEY:
+            payload = {
+                "model": NVIDIA_CHAT_MODEL,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt},
+                ],
+                "temperature": temperature,
+                "max_tokens": max_tokens,
+            }
+            resp = requests.post(
+                NVIDIA_CHAT_URL,
+                headers={
+                    "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=timeout,
+            )
+            resp.raise_for_status()
+            content = (
+                resp.json()
+                .get("choices", [{}])[0]
+                .get("message", {})
+                .get("content", "")
+                .strip()
+            )
+            if content:
+                return content
+
+        if not GEMINI_API_KEY:
+            raise RuntimeError("No NVIDIA_API_KEY or GEMINI_API_KEY configured")
+
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "systemInstruction": {"parts": [{"text": system_prompt}]},
+            "generationConfig": {
+                "maxOutputTokens": min(max_tokens * 4, 4096),
+                "temperature": temperature,
+            },
+        }
+        resp = requests.post(
+            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
+            headers={
+                "x-goog-api-key": GEMINI_API_KEY,
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=timeout,
+        )
+        resp.raise_for_status()
+        return (
+            resp.json()
+            .get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+            .strip()
+        )
 
     def research_with_exa(self, artist: str, topic: str) -> str:
         """Research article topic using Exa search for deeper insights."""
@@ -1148,7 +1176,7 @@ New CTA Headline:"""
     def _generate_cta_headline_gemini(
         self, title: str, content: str, artist: str
     ) -> str:
-        """Generate CTA headline via Gemini when Perplexity is unavailable."""
+        """Generate CTA headline via NVIDIA/Gemini when Perplexity is unavailable."""
         prompt = f"""Write a punchy, click-worthy music news headline.
 
 Original: {title}
@@ -1163,40 +1191,21 @@ Rules:
 
 Headline:"""
 
-        url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"gemini-3-flash-preview:generateContent"
-        )
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "maxOutputTokens": 1024,
-                "temperature": 0.9,
-            },
-        }
         try:
-            resp = requests.post(
-                url,
-                headers={
-                    "x-goog-api-key": GEMINI_API_KEY,
-                    "Content-Type": "application/json",
-                },
-                json=payload,
+            headline = self._generate_text_response(
+                prompt=prompt,
+                system_prompt=(
+                    "You are a viral headline writer for a music news app. "
+                    "Return only the headline text with no markdown or explanation."
+                ),
+                temperature=0.9,
+                max_tokens=120,
                 timeout=15,
-            )
-            resp.raise_for_status()
-            headline = (
-                resp.json()
-                .get("candidates", [{}])[0]
-                .get("content", {})
-                .get("parts", [{}])[0]
-                .get("text", "")
-                .strip()
             )
             if headline and not self._is_refusal(headline):
                 return headline[:100]
         except Exception as e:
-            print(f"  ⚠ Gemini CTA error: {e}")
+            print(f"  ⚠ CTA generation error: {e}")
         return self._transform_title_fallback(title)
 
     def _transform_title_fallback(self, original_title: str) -> str:
