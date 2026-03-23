@@ -30,8 +30,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
+NVIDIA_MODEL = os.getenv("NVIDIA_CHAT_MODEL", "minimaxai/minimax-m2.5")
+NVIDIA_CHAT_URL = os.getenv(
+    "NVIDIA_CHAT_URL", "https://integrate.api.nvidia.com/v1/chat/completions"
+)
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-2.5-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "miny-ven")
 API_KEY = os.getenv("FIREBASE_API_KEY", "")
 FIRESTORE_URL = (
@@ -139,7 +144,7 @@ def fetch_articles(since_hours: int = 72, limit: int | None = None) -> list[dict
 
 
 # ---------------------------------------------------------------------------
-# Gemini entity extraction
+# Entity extraction (NVIDIA primary, Gemini fallback)
 # ---------------------------------------------------------------------------
 
 EXTRACT_PROMPT = """\
@@ -174,10 +179,8 @@ Rules:
 """
 
 
-def extract_entities_batch(
-    article_blocks: list[dict],
-) -> list[dict]:
-    """Call Gemini to extract entities from a batch of articles."""
+def extract_entities_batch(article_blocks: list[dict]) -> list[dict]:
+    """Extract entities from a batch using NVIDIA first, Gemini fallback."""
     text_blocks = []
     for a in article_blocks:
         # Keep content short — long text causes Gemini to truncate JSON output
@@ -187,27 +190,69 @@ def extract_entities_batch(
 
     prompt = EXTRACT_PROMPT.format(articles="\n\n---\n\n".join(text_blocks))
 
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "systemInstruction": {
-            "parts": [{"text": "You are a music industry analyst. Return ONLY valid JSON arrays."}]
-        },
-        "generationConfig": {
-            "maxOutputTokens": 4096,
+    raw = ""
+    if NVIDIA_API_KEY:
+        payload = {
+            "model": NVIDIA_MODEL,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a music industry analyst. Return ONLY valid JSON arrays.",
+                },
+                {"role": "user", "content": prompt},
+            ],
             "temperature": 0.2,
-            "responseMimeType": "application/json",
-        },
-    }
+            "max_tokens": 1800,
+        }
+        r = requests.post(
+            NVIDIA_CHAT_URL,
+            headers={
+                "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=45,
+        )
+        r.raise_for_status()
+        raw = (
+            r.json()
+            .get("choices", [{}])[0]
+            .get("message", {})
+            .get("content", "")
+            .strip()
+        )
 
-    r = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-        headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-        json=payload,
-        timeout=45,
-    )
-    r.raise_for_status()
-
-    raw = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    if not raw:
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "systemInstruction": {
+                "parts": [
+                    {
+                        "text": "You are a music industry analyst. Return ONLY valid JSON arrays."
+                    }
+                ]
+            },
+            "generationConfig": {
+                "maxOutputTokens": 4096,
+                "temperature": 0.2,
+                "responseMimeType": "application/json",
+            },
+        }
+        r = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
+            headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
+            json=payload,
+            timeout=45,
+        )
+        r.raise_for_status()
+        raw = (
+            r.json()
+            .get("candidates", [{}])[0]
+            .get("content", {})
+            .get("parts", [{}])[0]
+            .get("text", "")
+            .strip()
+        )
 
     # Strip markdown code fences if present
     raw = re.sub(r"^```(?:json)?\s*", "", raw)
@@ -372,13 +417,15 @@ def main() -> None:
     parser.add_argument("--hours", type=int, default=72, help="Lookback window in hours (default: 72)")
     args = parser.parse_args()
 
-    if not GEMINI_API_KEY:
-        raise SystemExit("GEMINI_API_KEY not set")
+    if not NVIDIA_API_KEY and not GEMINI_API_KEY:
+        raise SystemExit("NVIDIA_API_KEY or GEMINI_API_KEY must be set")
     if not API_KEY and not args.dry_run:
         raise SystemExit("FIREBASE_API_KEY not set (use --dry-run to test without Firestore)")
 
     print(f"\n🎵 miny-ven entity tracker")
-    print(f"   lookback: {args.hours}h | model: {GEMINI_MODEL}\n")
+    model_label = NVIDIA_MODEL if NVIDIA_API_KEY else GEMINI_MODEL
+    provider = "nvidia" if NVIDIA_API_KEY else "gemini"
+    print(f"   lookback: {args.hours}h | provider: {provider} | model: {model_label}\n")
 
     # 1. Fetch articles
     print("📥 Fetching articles...")
