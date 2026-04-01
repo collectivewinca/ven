@@ -67,6 +67,14 @@ else:
 # NVIDIA NIM chat completions (optional — used for text generation)
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_CHAT_MODEL = os.getenv("NVIDIA_CHAT_MODEL", "minimaxai/minimax-m2.5")
+NVIDIA_CHAT_MODELS = [
+    model.strip()
+    for model in os.getenv(
+        "NVIDIA_CHAT_MODELS",
+        f"stepfun-ai/step-3.5-flash,z-ai/glm5,moonshotai/kimi-k2.5,{NVIDIA_CHAT_MODEL}",
+    ).split(",")
+    if model.strip()
+]
 NVIDIA_CHAT_URL = os.getenv(
     "NVIDIA_CHAT_URL", "https://integrate.api.nvidia.com/v1/chat/completions"
 )
@@ -75,7 +83,7 @@ NVIDIA_IMAGE_URL = os.getenv(
     "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3-medium",
 )
 if NVIDIA_API_KEY:
-    print(f"✓ NVIDIA chat enabled (model: {NVIDIA_CHAT_MODEL})")
+    print(f"NVIDIA chat enabled (models: {', ' .join(NVIDIA_CHAT_MODELS)})")
 else:
     print("⚠ NVIDIA_API_KEY not set, NVIDIA text generation disabled")
 
@@ -1098,34 +1106,50 @@ Rewrite as a full 60-word music news brief. Count each word. Return only the sum
     ) -> str:
         """Generate text using NVIDIA first, with Gemini as fallback."""
         if NVIDIA_API_KEY:
-            payload = {
-                "model": NVIDIA_CHAT_MODEL,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt},
-                ],
-                "temperature": temperature,
-                "max_tokens": max_tokens,
-            }
-            resp = requests.post(
-                NVIDIA_CHAT_URL,
-                headers={
-                    "Authorization": f"Bearer {NVIDIA_API_KEY}",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=timeout,
-            )
-            resp.raise_for_status()
-            content = (
-                resp.json()
-                .get("choices", [{}])[0]
-                .get("message", {})
-                .get("content", "")
-                .strip()
-            )
-            if content:
-                return content
+            nvidia_timeout = min(timeout, 30)
+            for model in NVIDIA_CHAT_MODELS:
+                payload = {
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                try:
+                    resp = requests.post(
+                        NVIDIA_CHAT_URL,
+                        headers={
+                            "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                            "Content-Type": "application/json",
+                        },
+                        json=payload,
+                        timeout=nvidia_timeout,
+                    )
+                    if resp.status_code == 429:
+                        print(f"  [warn] NVIDIA rate-limited on {model}, trying next model...")
+                        time.sleep(0.75)
+                        continue
+                    resp.raise_for_status()
+                    content = (
+                        resp.json()
+                        .get("choices", [{}])[0]
+                        .get("message", {})
+                        .get("content", "")
+                        .strip()
+                    )
+                    if content:
+                        return content
+                except requests.Timeout:
+                    print(f"  [warn] NVIDIA timeout on {model}, trying next model...")
+                    continue
+                except requests.RequestException as exc:
+                    print(
+                        f"  [warn] NVIDIA error on {model}: {self._trim_error(exc)}, "
+                        "trying next model..."
+                    )
+                    continue
 
         if not GEMINI_API_KEY:
             raise RuntimeError("No NVIDIA_API_KEY or GEMINI_API_KEY configured")
