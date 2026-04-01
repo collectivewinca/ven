@@ -64,6 +64,7 @@ jobs:
         PERPLEXITY_API_KEY: ${{ secrets.PERPLEXITY_API_KEY }}
         EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
         BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
         SCRAPER_ARTIFACT_DIR: artifacts
       run: |

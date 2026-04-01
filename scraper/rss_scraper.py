@@ -9,6 +9,7 @@ and Firestore REST API for storage.
 import xml.etree.ElementTree as ET
 import base64
 import json
+import html
 import requests
 import re
 import io
@@ -898,9 +899,13 @@ class RSSScraper:
 
     def summarize_with_gemini(self, title: str, content: str) -> str:
         """Summarize article to exactly 60 words using Gemini. Fetches URL if content is sparse."""
+        content = self._clean_summary_text(content)
+
         # If content is too sparse, try fetching the source URL from title context
         if len(content.split()) < 40 and content.startswith("http"):
-            content = self._fetch_article_text(content) or content
+            content = self._clean_summary_text(
+                self._fetch_article_text(content) or content
+            )
 
         if not NVIDIA_API_KEY and not GEMINI_API_KEY:
             words = content.split()
@@ -951,7 +956,7 @@ Your 60-word summary:"""
             if len(words) < 40:
                 summary = self._expand_summary_gemini(title, content, summary)
 
-            return summary
+            return self._clean_summary_text(summary)
         except Exception as e:
             print(f"  ⚠ Summary generation error: {e}, using fallback")
             words = content.split()
@@ -1064,6 +1069,24 @@ Rewrite as a full 60-word music news brief. Count each word. Return only the sum
         text = re.sub(r"\[[\d,\s]+\]", "", text)  # [1][2] → ""
         text = text.strip("\"'")
         return text.strip()
+
+    @staticmethod
+    def _clean_summary_text(text: str) -> str:
+        """Convert scraped HTML-heavy text into plain readable copy."""
+        if not text:
+            return ""
+
+        clean = html.unescape(text)
+        clean = re.sub(r"<!--.*?-->", " ", clean, flags=re.DOTALL)
+        clean = re.sub(
+            r"<script[^>]*>.*?</script>", " ", clean, flags=re.IGNORECASE | re.DOTALL
+        )
+        clean = re.sub(
+            r"<style[^>]*>.*?</style>", " ", clean, flags=re.IGNORECASE | re.DOTALL
+        )
+        clean = re.sub(r"<[^>]+>", " ", clean)
+        clean = re.sub(r"\s+", " ", clean)
+        return clean.strip()
 
     def _generate_text_response(
         self,
