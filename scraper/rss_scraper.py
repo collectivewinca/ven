@@ -906,7 +906,7 @@ class RSSScraper:
         return "", "none"
 
     def summarize_with_gemini(self, title: str, content: str) -> str:
-        """Summarize article to exactly 60 words using Gemini. Fetches URL if content is sparse."""
+        """Summarize article into clean, exact-60-word copy for storage."""
         content = self._clean_summary_text(content)
 
         # If content is too sparse, try fetching the source URL from title context
@@ -915,24 +915,24 @@ class RSSScraper:
                 self._fetch_article_text(content) or content
             )
 
-        if not NVIDIA_API_KEY and not GEMINI_API_KEY:
-            words = content.split()
-            if len(words) >= 60:
-                return " ".join(words[:60]) + "."
-            return " ".join(words) + "." if words else title
+        fallback_summary = self._force_exact_60_summary(title, content)
 
-        prompt = f"""Write a 60-word music news summary. Count every word carefully — it must be between 55 and 65 words.
+        if not NVIDIA_API_KEY and not GEMINI_API_KEY:
+            return fallback_summary
+
+        prompt = f"""Write a 60-word music news summary. Count every word carefully and return exactly 60 words.
 
 Title: {title}
 
 Article: {content[:2000]}
 
 Rules:
-- MUST be 55–65 words (count carefully before responding)
+- MUST be exactly 60 words
 - Include the artist name, the news development, and why it matters
-- Punchy music-journalist tone — no filler, no fluff
-- If article is thin, expand with context about the artist or event
+- Punchy music-journalist tone with no filler
+- If the article is thin, use context from the title and available article details
 - Do NOT start with "Summary:" or the title
+- Return only the summary text
 - If this is clearly not music-related, say SKIP
 
 Your 60-word summary:"""
@@ -940,7 +940,10 @@ Your 60-word summary:"""
         try:
             summary = self._generate_text_response(
                 prompt=prompt,
-                system_prompt="You are a professional music journalist writing 60-word news briefs. Always write the full 60 words — never truncate early.",
+                system_prompt=(
+                    "You are a professional music journalist writing concise 60-word "
+                    "news briefs. Return exactly 60 words of clean plain text."
+                ),
                 temperature=0.7,
                 max_tokens=600,
                 timeout=30,
@@ -951,49 +954,56 @@ Your 60-word summary:"""
                 or self._is_refusal(summary)
                 or summary.upper().startswith("SKIP")
             ):
-                print("  ⚠ Gemini refused/skipped summary, using fallback")
-                words = content.split()
-                return " ".join(words[:60]) + "." if words else title
+                print("  ? Summary generation skipped/refused, using exact-60 fallback")
+                return fallback_summary
 
-            # Hard cap at 70 words
+            summary = self._clean_summary_text(summary)
             words = summary.split()
-            if len(words) > 70:
-                summary = " ".join(words[:70]) + "."
 
-            # If still under 40 words, retry once with stronger instruction
-            if len(words) < 40:
+            if len(words) < 55:
                 summary = self._expand_summary_gemini(title, content, summary)
+                summary = self._clean_summary_text(summary)
+                words = summary.split()
 
-            return self._clean_summary_text(summary)
+            if len(words) != 60:
+                print(
+                    f"  ? Summary came back at {len(words)} words, normalizing to 60"
+                )
+                return self._force_exact_60_summary(title, summary or content)
+
+            return summary
         except Exception as e:
-            print(f"  ⚠ Summary generation error: {e}, using fallback")
-            words = content.split()
-            return " ".join(words[:60]) + "." if words else title
+            print(f"  ? Summary generation error: {e}, using exact-60 fallback")
+            return fallback_summary
 
     def _expand_summary_gemini(
         self, title: str, content: str, short_summary: str
     ) -> str:
-        """If initial summary is too short, ask Gemini to expand it to 60 words."""
-        prompt = f"""This summary is too short. Expand it to exactly 60 words.
+        """If initial summary is too short, ask the model for a clean 60-word retry."""
+        prompt = f"""This summary is too short. Rewrite it as exactly 60 words.
 
 Title: {title}
 Original article: {content[:1000]}
 Short draft: {short_summary}
 
-Rewrite as a full 60-word music news brief. Count each word. Return only the summary text."""
+Rules:
+- Return exactly 60 words
+- Keep it factual, punchy, and music-news focused
+- Return only the summary text"""
         try:
             expanded = self._generate_text_response(
                 prompt=prompt,
-                system_prompt="Expand short music-news drafts into complete 60-word briefs.",
+                system_prompt=(
+                    "Expand short music-news drafts into complete 60-word briefs. "
+                    "Return exactly 60 words of plain text."
+                ),
                 temperature=0.6,
                 max_tokens=400,
                 timeout=20,
             )
-            if expanded and len(expanded.split()) >= 40:
-                words = expanded.split()
-                return " ".join(words[:70]) + (
-                    "." if not expanded.rstrip().endswith(".") else ""
-                )
+            expanded = self._clean_summary_text(expanded)
+            if expanded and self._summary_word_count(expanded) >= 55:
+                return expanded
         except Exception:
             pass
         return short_summary
@@ -1095,6 +1105,49 @@ Rewrite as a full 60-word music news brief. Count each word. Return only the sum
         clean = re.sub(r"<[^>]+>", " ", clean)
         clean = re.sub(r"\s+", " ", clean)
         return clean.strip()
+
+    @staticmethod
+    def _summary_word_count(text: str) -> int:
+        return len((text or '').split())
+
+    def _force_exact_60_summary(self, title: str, content: str) -> str:
+        """Build a clean deterministic 60-word fallback from title and article text."""
+        source = self._clean_summary_text(f"{title}. {content}")
+        words = source.split()
+
+        if not words:
+            words = self._clean_summary_text(title).split()
+
+        if not words:
+            words = [
+                'Music', 'news', 'update', 'details', 'remain', 'limited', 'for',
+                'now', 'but', 'this', 'story', 'has', 'been', 'flagged', 'for',
+                'follow-up', 'reporting', 'as', 'more', 'verified', 'information',
+                'becomes', 'available', 'from', 'official', 'sources', 'and',
+                'artist', 'representatives', 'in', 'the', 'hours', 'ahead',
+            ]
+
+        filler = (
+            'Additional reporting context remains limited, so this brief highlights '
+            'the confirmed update, the key artist involved, and why the development '
+            'matters for fans watching the story unfold right now.'
+        ).split()
+
+        cleaned_words = []
+        for word in words + filler:
+            normalized = word.strip()
+            if normalized:
+                cleaned_words.append(normalized)
+            if len(cleaned_words) >= 60:
+                break
+
+        if len(cleaned_words) < 60:
+            cleaned_words.extend(filler[: 60 - len(cleaned_words)])
+
+        summary = ' '.join(cleaned_words[:60]).strip(' .,;:-')
+        if summary and summary[-1] not in '.!?':
+            summary += '.'
+        return summary
 
     def _generate_text_response(
         self,

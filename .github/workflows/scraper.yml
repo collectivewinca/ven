@@ -65,11 +65,82 @@ jobs:
         EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+        NVIDIA_CHAT_MODELS: stepfun-ai/step-3.5-flash,z-ai/glm5,moonshotai/kimi-k2.5,minimaxai/minimax-m2.5
         BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
         SCRAPER_ARTIFACT_DIR: artifacts
       run: |
         cd scraper
         python3 rss_scraper.py
+
+    - name: Verify recent summary quality
+      env:
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+      run: |
+        python3 - <<'PY'
+        import json
+        import os
+        import re
+        from urllib.request import Request, urlopen
+
+        key = os.environ.get("FIREBASE_API_KEY", "")
+        if not key:
+            raise SystemExit("FIREBASE_API_KEY is missing")
+
+        url = (
+            "https://firestore.googleapis.com/v1/projects/miny-ven/databases/"
+            "(default)/documents:runQuery?key=" + key
+        )
+        payload = {
+            "structuredQuery": {
+                "from": [{"collectionId": "articles"}],
+                "orderBy": [
+                    {
+                        "field": {"fieldPath": "fetched_at"},
+                        "direction": "DESCENDING"
+                    }
+                ],
+                "limit": 25
+            }
+        }
+
+        req = Request(
+            url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        rows = json.load(urlopen(req, timeout=30))
+        bad = []
+        checked = 0
+
+        for row in rows:
+            doc = row.get("document")
+            if not doc:
+                continue
+            fields = doc.get("fields", {})
+            title = fields.get("title", {}).get("stringValue", "(untitled)")
+            summary = fields.get("summary", {}).get("stringValue", "")
+            words = len(summary.split())
+            checked += 1
+
+            if (
+                words != 60
+                or "<" in summary
+                or "&#" in summary
+                or summary.lower().startswith("summary:")
+            ):
+                bad.append({"title": title, "words": words, "summary": summary[:180]})
+
+        print(f"Checked recent summaries: {checked}")
+        if bad:
+            print("Recent summary quality check failed:")
+            for item in bad[:10]:
+                print(
+                    f"- {item['title']} | words={item['words']} | "
+                    f"summary={item['summary']}"
+                )
+            raise SystemExit(f"{len(bad)} recent summaries failed validation")
+        PY
 
     - name: Upload scraper artifacts
       if: always()
