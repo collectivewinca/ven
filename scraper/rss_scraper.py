@@ -87,7 +87,9 @@ if NVIDIA_API_KEY:
 else:
     print("⚠ NVIDIA_API_KEY not set, NVIDIA text generation disabled")
 
-# Firebase Storage (optional — used to persist AI-generated images)
+# Firebase Admin (optional — used for privileged Firestore/Storage access)
+_firebase_app = None
+_firestore_db = None
 _storage_bucket = None
 FIREBASE_STORAGE_BUCKET = os.getenv(
     "FIREBASE_STORAGE_BUCKET", "miny-ven.firebasestorage.app"
@@ -96,11 +98,13 @@ FIREBASE_SA_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
 if FIREBASE_SA_B64:
     try:
         import firebase_admin
-        from firebase_admin import credentials, storage
+        from firebase_admin import credentials, firestore, storage
 
         sa_info = json.loads(base64.b64decode(FIREBASE_SA_B64))
         cred = credentials.Certificate(sa_info)
-        app = firebase_admin.initialize_app(cred)
+        _firebase_app = firebase_admin.initialize_app(cred)
+        _firestore_db = firestore.client(app=_firebase_app)
+        print("✓ Firebase Admin initialized for Firestore")
         bucket_candidates = []
         if FIREBASE_STORAGE_BUCKET:
             bucket_candidates.append(FIREBASE_STORAGE_BUCKET)
@@ -110,7 +114,7 @@ if FIREBASE_SA_B64:
 
         for candidate in bucket_candidates:
             try:
-                test_bucket = storage.bucket(name=candidate, app=app)
+                test_bucket = storage.bucket(name=candidate, app=_firebase_app)
                 # Validate bucket existence up front to avoid runtime 404s.
                 if test_bucket.exists():
                     _storage_bucket = test_bucket
@@ -1189,9 +1193,9 @@ Rules:
                         resp.json()
                         .get("choices", [{}])[0]
                         .get("message", {})
-                        .get("content", "")
-                        .strip()
+                        .get("content")
                     )
+                    content = (content or "").strip()
                     if content:
                         return content
                 except requests.Timeout:
@@ -1225,14 +1229,14 @@ Rules:
             timeout=timeout,
         )
         resp.raise_for_status()
-        return (
+        text = (
             resp.json()
             .get("candidates", [{}])[0]
             .get("content", {})
             .get("parts", [{}])[0]
-            .get("text", "")
-            .strip()
+            .get("text")
         )
+        return (text or "").strip()
 
     def research_with_exa(self, artist: str, topic: str) -> str:
         """Research article topic using Exa search for deeper insights."""
@@ -1345,7 +1349,7 @@ New CTA Headline:"""
                     max_tokens=100,
                     temperature=0.8,
                 )
-                headline = result.choices[0].message.content.strip()
+                headline = (result.choices[0].message.content or "").strip()
                 headline = self._clean_perplexity_text(headline)
 
                 if not self._is_refusal(headline):
@@ -1394,6 +1398,7 @@ Headline:"""
                 max_tokens=120,
                 timeout=15,
             )
+            headline = self._clean_summary_text(headline)
             if headline and not self._is_refusal(headline):
                 return headline[:100]
         except Exception as e:
@@ -1691,18 +1696,8 @@ Headline:"""
             return False
 
     def save_to_firebase(self, article: Article):
-        """Save article to Firebase Firestore via REST API"""
+        """Save article to Firebase Firestore, preferring Admin SDK when available."""
         try:
-            if not API_KEY:
-                print("  ✗ Failed to save: FIREBASE_API_KEY is missing")
-                self._log_event(
-                    "save_failed",
-                    level="error",
-                    reason="missing_api_key",
-                    title=article.title,
-                )
-                return False
-
             article_dict = asdict(article)
             article_dict["published_at"] = article.published_at.isoformat()
             article_dict["fetched_at"] = article.fetched_at.isoformat()
@@ -1757,6 +1752,48 @@ Headline:"""
                     }
                 )
             )
+
+            if _firestore_db is not None:
+                try:
+                    _firestore_db.collection("articles").document(doc_id).set(
+                        article_dict
+                    )
+                    print(f"  ✓ Saved (admin): {article.title[:60]}...")
+                    self._log_event(
+                        "save_ok_admin",
+                        doc_id=doc_id,
+                        title=article.title,
+                        source=article.source,
+                    )
+                    if canonical_url:
+                        self.existing_source_urls.add(canonical_url)
+                    self.existing_titles.add((article.title or "").lower().strip())
+                    for name in article.artist_names or []:
+                        key = name.lower().strip()
+                        if key:
+                            self.existing_artist_counts[key] = (
+                                self.existing_artist_counts.get(key, 0) + 1
+                            )
+                    return True
+                except Exception as exc:
+                    print(f"  ⚠ Admin Firestore save failed, falling back to REST: {exc}")
+                    self._log_event(
+                        "save_admin_failed",
+                        level="warning",
+                        doc_id=doc_id,
+                        title=article.title,
+                        error=str(exc),
+                    )
+
+            if not API_KEY:
+                print("  ✗ Failed to save: FIREBASE_API_KEY is missing")
+                self._log_event(
+                    "save_failed",
+                    level="error",
+                    reason="missing_api_key",
+                    title=article.title,
+                )
+                return False
 
             url = f"{FIRESTORE_URL}/articles/{doc_id}?key={API_KEY}"
             payload = {"fields": self.convert_to_firestore_fields(article_dict)}

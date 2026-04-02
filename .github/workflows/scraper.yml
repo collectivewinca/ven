@@ -8,6 +8,10 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Capture run start time
+      id: run_meta
+      run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%S)" >> "$GITHUB_OUTPUT"
+
     - name: Checkout code
       uses: actions/checkout@v4
     
@@ -68,6 +72,7 @@ jobs:
         NVIDIA_CHAT_MODELS: stepfun-ai/step-3.5-flash,z-ai/glm5,moonshotai/kimi-k2.5,minimaxai/minimax-m2.5
         BRAVE_API_KEY: ${{ secrets.BRAVE_API_KEY }}
         SCRAPER_ARTIFACT_DIR: artifacts
+        SCRAPER_RUN_STARTED_AT: ${{ steps.run_meta.outputs.started_at }}
       run: |
         cd scraper
         python3 rss_scraper.py
@@ -75,16 +80,19 @@ jobs:
     - name: Verify recent summary quality
       env:
         FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        SCRAPER_RUN_STARTED_AT: ${{ steps.run_meta.outputs.started_at }}
       run: |
         python3 - <<'PY'
         import json
         import os
-        import re
         from urllib.request import Request, urlopen
 
         key = os.environ.get("FIREBASE_API_KEY", "")
         if not key:
             raise SystemExit("FIREBASE_API_KEY is missing")
+        started_at = os.environ.get("SCRAPER_RUN_STARTED_AT", "")
+        if not started_at:
+            raise SystemExit("SCRAPER_RUN_STARTED_AT is missing")
 
         url = (
             "https://firestore.googleapis.com/v1/projects/miny-ven/databases/"
@@ -93,13 +101,20 @@ jobs:
         payload = {
             "structuredQuery": {
                 "from": [{"collectionId": "articles"}],
+                "where": {
+                    "fieldFilter": {
+                        "field": {"fieldPath": "fetched_at"},
+                        "op": "GREATER_THAN_OR_EQUAL",
+                        "value": {"stringValue": started_at}
+                    }
+                },
                 "orderBy": [
                     {
                         "field": {"fieldPath": "fetched_at"},
                         "direction": "DESCENDING"
                     }
                 ],
-                "limit": 25
+                "limit": 50
             }
         }
 
@@ -131,9 +146,11 @@ jobs:
             ):
                 bad.append({"title": title, "words": words, "summary": summary[:180]})
 
-        print(f"Checked recent summaries: {checked}")
+        print(f"Checked summaries from this run: {checked}")
+        if checked == 0:
+            raise SystemExit("No new articles were saved during this run")
         if bad:
-            print("Recent summary quality check failed:")
+            print("Recent summary quality check failed for this run:")
             for item in bad[:10]:
                 print(
                     f"- {item['title']} | words={item['words']} | "
