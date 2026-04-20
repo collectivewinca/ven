@@ -2,22 +2,24 @@
 """
 Entity extraction from miny-ven Firestore articles.
 
-Uses Gemini 3 Flash to extract structured entities (artists, bands, venues,
-festivals, labels, producers) from article titles + content. Outputs a
-deduplicated JSON manifest for outreach research.
+Uses Ollama Cloud (minimax-m2.7) via ollama_client.chat to extract structured
+entities (artists, bands, venues, festivals, labels, producers) from article
+titles + content. Outputs a deduplicated JSON manifest for outreach research.
+
+Previously used Gemini 2.5 Flash with a hardcoded API key — that key leaked
+in git history of the archived miny-ven repo and was retired 2026-04-20.
 """
 
 import json
 import os
 import re
-import requests
 import time
 from collections import defaultdict
 
-GEMINI_API_KEY = os.environ.get(
-    "GEMINI_API_KEY", "AIzaSyBstb1UtEi88OZx497UX7G6slItECSI640"
-)
-GEMINI_MODEL = "gemini-2.5-flash"  # Non-thinking model, much more reliable for structured JSON
+import requests
+
+from ollama_client import chat, OllamaError
+
 PROJECT_ID = "miny-ven"
 FIRESTORE_URL = (
     f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}"
@@ -62,7 +64,7 @@ def get_field(fields, name):
 
 
 def extract_entities_batch(articles_text: str) -> dict:
-    """Send a batch of article summaries to Gemini for entity extraction."""
+    """Send a batch of article summaries to Ollama Cloud for entity extraction."""
     prompt = f"""Extract ALL named entities from these music news articles.
 
 {articles_text}
@@ -92,26 +94,16 @@ Rules:
 - Do NOT include generic terms like "artists", "bands", "musicians"
 - Return ONLY the JSON, no explanation"""
 
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "systemInstruction": {
-            "parts": [{"text": "You are a music industry entity extractor. Return ONLY valid JSON, nothing else."}]
-        },
-        "generationConfig": {
-            "maxOutputTokens": 2048,
-            "temperature": 0.2,
-            "responseMimeType": "application/json",
-        },
-    }
-
-    r = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-        headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-        json=payload,
-        timeout=45,
-    )
-    r.raise_for_status()
-    text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+    try:
+        text = chat(
+            prompt=prompt,
+            system="You are a music industry entity extractor. Return ONLY valid JSON, nothing else.",
+            max_tokens=2048,
+            temperature=0.2,
+        )
+    except OllamaError as e:
+        print(f"  Warning: Ollama call failed: {e}")
+        return {}
 
     # Extract JSON from potential markdown code block
     json_match = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL)

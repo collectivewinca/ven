@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """
-Refresh the latest 20 articles in Firestore with new CTA titles and summaries
-using Gemini 3 Flash Preview.
+Refresh the latest 20 articles in Firestore with new CTA titles and summaries.
+
+Uses Ollama Cloud (minimax-m2.7) via ollama_client.chat. Previously used
+Gemini 3 Flash Preview with a hardcoded API key — that key was exposed in
+git history of the archived miny-ven repo and was retired 2026-04-20.
 """
 
 import json
 import requests
 import time
 
-GEMINI_API_KEY = "AIzaSyBstb1UtEi88OZx497UX7G6slItECSI640"
-GEMINI_MODEL = "gemini-3-flash-preview"
+from ollama_client import chat, OllamaError
+
 PROJECT_ID = "miny-ven"
 FIRESTORE_URL = f"https://firestore.googleapis.com/v1/projects/{PROJECT_ID}/databases/(default)/documents"
 
@@ -50,7 +53,7 @@ def get_field(fields, name):
 
 
 def generate_cta_title(original_title, content, artist):
-    """Generate high-CTA headline using Gemini."""
+    """Generate high-CTA headline via Ollama Cloud (minimax-m2.7)."""
     prompt = f"""Create an engaging, click-worthy headline for this music news story.
 
 Original Title: {original_title}
@@ -67,22 +70,12 @@ Requirements:
 
 New CTA Headline:"""
 
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "systemInstruction": {
-            "parts": [{"text": "You are a viral headline writer for a music news app. Return ONLY the headline, no quotes, no markdown."}]
-        },
-        "generationConfig": {"maxOutputTokens": 512, "temperature": 0.8},
-    }
-
-    r = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-        headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-        json=payload,
-        timeout=30,
+    text = chat(
+        prompt=prompt,
+        system="You are a viral headline writer for a music news app. Return ONLY the headline, no quotes, no markdown.",
+        max_tokens=512,
+        temperature=0.8,
     )
-    r.raise_for_status()
-    text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     # Clean up quotes, markdown, and reasoning leaks
     text = text.strip('"\'').strip()
     if text.startswith("**") and text.endswith("**"):
@@ -93,7 +86,7 @@ New CTA Headline:"""
 
 
 def generate_summary(title, content):
-    """Generate 60-word summary using Gemini."""
+    """Generate 60-word summary via Ollama Cloud (minimax-m2.7)."""
     prompt = f"""Summarize this music news article in EXACTLY 60 words or less.
 
 Title: {title}
@@ -109,22 +102,13 @@ Requirements:
 
 Summary (60 words max):"""
 
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "systemInstruction": {
-            "parts": [{"text": "You are a professional music journalist who writes concise 60-word news briefs for creators."}]
-        },
-        "generationConfig": {"maxOutputTokens": 256, "temperature": 0.7},
-    }
-
-    r = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent",
-        headers={"x-goog-api-key": GEMINI_API_KEY, "Content-Type": "application/json"},
-        json=payload,
-        timeout=30,
+    text = chat(
+        prompt=prompt,
+        system="You are a professional music journalist who writes concise 60-word news briefs for creators.",
+        model="qwen3-coder:480b",
+        max_tokens=600,
+        temperature=0.7,
     )
-    r.raise_for_status()
-    text = r.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
     words = text.split()
     if len(words) > 60:
         text = " ".join(words[:60]) + "."
