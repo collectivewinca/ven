@@ -9,7 +9,6 @@ and Firestore REST API for storage.
 import xml.etree.ElementTree as ET
 import base64
 import json
-import html
 import requests
 import re
 import io
@@ -56,25 +55,36 @@ if EXA_API_KEY:
     except ImportError:
         print("⚠ exa_py package not installed, Exa features disabled")
 
-# Gemini API (optional — used for AI image generation fallback)
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
-if GEMINI_API_KEY:
-    print(f"✓ Gemini image generation enabled (model: {GEMINI_IMAGE_MODEL})")
+# Brave Search API (primary article discovery — replaces Exa)
+BRAVE_API_KEY = os.getenv("BRAVE_API_KEY", "")
+if BRAVE_API_KEY:
+    print("✓ Brave Search enabled for article discovery")
 else:
-    print("⚠ GEMINI_API_KEY not set, AI image generation disabled")
+    print("⚠ BRAVE_API_KEY not set, Brave discovery disabled")
 
-# NVIDIA NIM chat completions (optional — used for text generation)
+# DDGS (optional — supplementary web discovery)
+_ddgs_client = None
+try:
+    from ddgs import DDGS
+
+    _ddgs_client = DDGS()
+except ImportError:
+    print("⚠ ddgs package not installed, DDGS discovery disabled")
+except Exception as e:
+    print(f"⚠ DDGS init failed: {e}")
+
+# Gemini removed 2026-04-20 — images via NVIDIA SD3, text via NVIDIA MiniMax / DeepSeek.
+
+# DeepSeek API (optional — used as text generation fallback after NVIDIA)
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+DEEPSEEK_BASE_URL = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1")
+DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+if DEEPSEEK_API_KEY:
+    print(f"✓ DeepSeek text generation enabled (model: {DEEPSEEK_MODEL})")
+
+# NVIDIA NIM chat/image APIs (optional — primary for text and image generation)
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_CHAT_MODEL = os.getenv("NVIDIA_CHAT_MODEL", "minimaxai/minimax-m2.5")
-NVIDIA_CHAT_MODELS = [
-    model.strip()
-    for model in os.getenv(
-        "NVIDIA_CHAT_MODELS",
-        f"stepfun-ai/step-3.5-flash,z-ai/glm5,moonshotai/kimi-k2.5,{NVIDIA_CHAT_MODEL}",
-    ).split(",")
-    if model.strip()
-]
 NVIDIA_CHAT_URL = os.getenv(
     "NVIDIA_CHAT_URL", "https://integrate.api.nvidia.com/v1/chat/completions"
 )
@@ -83,13 +93,11 @@ NVIDIA_IMAGE_URL = os.getenv(
     "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3-medium",
 )
 if NVIDIA_API_KEY:
-    print(f"NVIDIA chat enabled (models: {', ' .join(NVIDIA_CHAT_MODELS)})")
+    print(f"✓ NVIDIA enabled (chat model: {NVIDIA_CHAT_MODEL})")
 else:
-    print("⚠ NVIDIA_API_KEY not set, NVIDIA text generation disabled")
+    print("⚠ NVIDIA_API_KEY not set, NVIDIA generation disabled")
 
-# Firebase Admin (optional — used for privileged Firestore/Storage access)
-_firebase_app = None
-_firestore_db = None
+# Firebase Storage (optional — used to persist AI-generated images)
 _storage_bucket = None
 FIREBASE_STORAGE_BUCKET = os.getenv(
     "FIREBASE_STORAGE_BUCKET", "miny-ven.firebasestorage.app"
@@ -98,13 +106,11 @@ FIREBASE_SA_B64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
 if FIREBASE_SA_B64:
     try:
         import firebase_admin
-        from firebase_admin import credentials, firestore, storage
+        from firebase_admin import credentials, storage
 
         sa_info = json.loads(base64.b64decode(FIREBASE_SA_B64))
         cred = credentials.Certificate(sa_info)
-        _firebase_app = firebase_admin.initialize_app(cred)
-        _firestore_db = firestore.client(app=_firebase_app)
-        print("✓ Firebase Admin initialized for Firestore")
+        app = firebase_admin.initialize_app(cred)
         bucket_candidates = []
         if FIREBASE_STORAGE_BUCKET:
             bucket_candidates.append(FIREBASE_STORAGE_BUCKET)
@@ -114,7 +120,7 @@ if FIREBASE_SA_B64:
 
         for candidate in bucket_candidates:
             try:
-                test_bucket = storage.bucket(name=candidate, app=_firebase_app)
+                test_bucket = storage.bucket(name=candidate, app=app)
                 # Validate bucket existence up front to avoid runtime 404s.
                 if test_bucket.exists():
                     _storage_bucket = test_bucket
@@ -163,6 +169,36 @@ RSS_SOURCES = {
         "genre": "mixed",
         "priority": 2,
     },
+    "alfitude": {"url": "https://alfitude.com/feed/", "genre": "mixed", "priority": 2},
+    "bandcamp_daily": {"url": "https://daily.bandcamp.com/feed", "genre": "mixed", "priority": 2},
+    "brazil_beat": {"url": "https://brazilbeatblog.wordpress.com/feed/", "genre": "mixed", "priority": 2},
+    "consequence": {"url": "https://consequence.net/feed/", "genre": "mixed", "priority": 2},
+    "diy_mag": {"url": "https://diymag.com/feeds/all", "genre": "mixed", "priority": 2, "display_name": "DIY Mag"},
+    "dj_mag": {"url": "https://djmag.com/feed", "genre": "mixed", "priority": 2, "display_name": "DJ Mag"},
+    "earmilk": {"url": "https://earmilk.com/feed/", "genre": "mixed", "priority": 2},
+    "east_of_8th": {"url": "https://eastof8th.com/feed/", "genre": "mixed", "priority": 2, "display_name": "East of 8th"},
+    "fact_mag": {"url": "https://www.factmag.com/feed/", "genre": "mixed", "priority": 2, "display_name": "FACT Mag"},
+    "for_the_love_of_bands": {"url": "https://fortheloveofbands.com/feed/", "genre": "mixed", "priority": 2, "display_name": "For the Love of Bands"},
+    "good_because_danish": {"url": "https://goodbecausedanish.com/feed/", "genre": "mixed", "priority": 2, "display_name": "Good Because Danish"},
+    "gorilla_vs_bear": {"url": "https://www.gorillavsbear.net/feed/", "genre": "mixed", "priority": 2, "display_name": "Gorilla vs Bear"},
+    "iq_mag": {"url": "https://www.iq-mag.net/feed/", "genre": "mixed", "priority": 2, "display_name": "IQ Mag"},
+    "lefuturewave": {"url": "https://lefuturewave.com/feed/", "genre": "mixed", "priority": 2},
+    "line_of_best_fit": {"url": "https://www.thelineofbestfit.com/feed", "genre": "mixed", "priority": 2, "display_name": "The Line of Best Fit"},
+    "metropolis_japan": {"url": "https://metropolisjapan.com/feed/", "genre": "mixed", "priority": 2, "display_name": "Metropolis Japan"},
+    "moroccan_tape_stash": {"url": "https://moroccantapestash.blogspot.com/feeds/posts/default", "genre": "mixed", "priority": 2, "display_name": "Moroccan Tape Stash"},
+    "music_mecca": {"url": "https://musicmecca.org/feed/", "genre": "mixed", "priority": 2},
+    "muzique_magazine": {"url": "https://muziquemagazine.com/feed/", "genre": "mixed", "priority": 2, "display_name": "Muzique Magazine"},
+    "nme": {"url": "https://www.nme.com/feed", "genre": "mixed", "priority": 2, "display_name": "NME"},
+    "obscure_sound": {"url": "https://obscuresound.com/feed/", "genre": "mixed", "priority": 2},
+    "parapop": {"url": "https://parapop.net/feed/", "genre": "mixed", "priority": 2},
+    "quietus": {"url": "https://thequietus.com/feed", "genre": "mixed", "priority": 2},
+    "radionica": {"url": "https://www.radionica.rocks/rss.xml", "genre": "mixed", "priority": 2},
+    "remezcla": {"url": "https://remezcla.com/feed/", "genre": "mixed", "priority": 2},
+    "sounds_and_colours": {"url": "https://soundsandcolours.com/music/feed/", "genre": "mixed", "priority": 2, "display_name": "Sounds and Colours"},
+    "stereogum": {"url": "https://www.stereogum.com/feed/", "genre": "mixed", "priority": 2},
+    "the_beat_bali": {"url": "https://thebeatbali.com/feed/", "genre": "mixed", "priority": 2, "display_name": "The Beat Bali"},
+    "twangville": {"url": "https://twangville.com/feed/", "genre": "mixed", "priority": 2},
+    "under_the_radar": {"url": "http://www.undertheradarmag.com/site/rss", "genre": "mixed", "priority": 2, "display_name": "Under the Radar"},
 }
 
 # Genre classification keywords
@@ -234,19 +270,12 @@ class Article:
     fetched_at: datetime
     image_source: str = "unknown"
     location: str = ""
-    epk_url: str = ""
-    epk_status: str = "missing"
 
 
 class RSSScraper:
     # Max articles for the same primary artist in the active (72h) window.
     # Prevents one artist/event dominating the feed.
     MAX_ARTICLES_PER_ARTIST = 2
-
-    # RapidConnect Firestore config for EPK resolution
-    RC_PROJECT_ID = os.getenv("RC_FIREBASE_PROJECT_ID", "subway-musician-564bd")
-    RC_API_KEY = os.getenv("RC_FIREBASE_API_KEY", "AIzaSyBtR-kmZULXQZu3M9Zgi1LIUqKECklofOw")
-    RC_BASE_URL = "https://rapidconnect.minyvinyl.com/artists"
 
     def __init__(self):
         self.existing_source_urls: Set[str] = set()
@@ -260,8 +289,6 @@ class RSSScraper:
         )
         self.perplexity_disabled = False
         self.storage_upload_disabled = False
-        # Cache: lowercase artist name → (identifier, epk_url) or None
-        self._epk_cache: Dict[str, Optional[Tuple[str, str]]] = {}
 
     def _log_event(self, event: str, level: str = "info", **data: object) -> None:
         self.events.append(
@@ -273,86 +300,6 @@ class RSSScraper:
                 "data": data,
             }
         )
-
-    def resolve_epk(self, artist_names: List[str]) -> Tuple[str, str]:
-        """Resolve artist names against RapidConnect Firestore.
-
-        Returns (epk_url, epk_status) for the first matched artist.
-        Queries by name_lw field (lowercase artist name).
-        Results are cached per run to avoid repeated API calls.
-        """
-        if not self.RC_API_KEY or not artist_names:
-            return ("", "missing")
-
-        for name in artist_names:
-            key = name.lower().strip()
-            if not key:
-                continue
-
-            # Check cache first
-            if key in self._epk_cache:
-                cached = self._epk_cache[key]
-                if cached:
-                    return cached
-                continue
-
-            # Query RapidConnect Firestore for matching artist
-            try:
-                rc_url = (
-                    f"https://firestore.googleapis.com/v1/projects/{self.RC_PROJECT_ID}"
-                    f"/databases/(default)/documents:runQuery?key={self.RC_API_KEY}"
-                )
-                query_payload = {
-                    "structuredQuery": {
-                        "from": [{"collectionId": "musicians"}],
-                        "where": {
-                            "fieldFilter": {
-                                "field": {"fieldPath": "name_lw"},
-                                "op": "EQUAL",
-                                "value": {"stringValue": key},
-                            }
-                        },
-                        "select": {
-                            "fields": [
-                                {"fieldPath": "identifier"},
-                                {"fieldPath": "name_lw"},
-                            ]
-                        },
-                        "limit": 1,
-                    }
-                }
-
-                resp = self.session.post(rc_url, json=query_payload, timeout=8)
-                if resp.status_code == 200:
-                    results = resp.json()
-                    if results and isinstance(results, list):
-                        for doc_result in results:
-                            doc = doc_result.get("document")
-                            if doc:
-                                fields = doc.get("fields", {})
-                                identifier = (
-                                    fields.get("identifier", {}).get("stringValue", "")
-                                    or doc["name"].split("/")[-1]
-                                )
-                                epk_url = f"{self.RC_BASE_URL}/{identifier}"
-                                self._epk_cache[key] = (epk_url, "ready")
-                                print(f"    ✓ EPK found: {name} → {identifier}")
-                                self._log_event(
-                                    "epk_resolved",
-                                    artist=name,
-                                    identifier=identifier,
-                                    epk_url=epk_url,
-                                )
-                                return (epk_url, "ready")
-
-                # No match found for this artist
-                self._epk_cache[key] = None
-
-            except Exception as e:
-                print(f"    ⚠ EPK lookup failed for {name}: {e}")
-                self._epk_cache[key] = None
-
-        return ("", "missing")
 
     def _flush_artifacts(self, summary: Dict[str, object]) -> None:
         try:
@@ -602,37 +549,119 @@ class RSSScraper:
             )
             return None
 
-    def _decode_nvidia_image_payload(self, image_field: str) -> Optional[bytes]:
-        """Decode NVIDIA image payload that may be raw base64 or a data URI."""
-        if not image_field:
+    def _extract_model_text(self, text: str) -> str:
+        t = (text or "").strip()
+        if not t:
+            return ""
+        # Remove explicit thinking blocks.
+        t = re.sub(r"<think>.*?</think>", "", t, flags=re.IGNORECASE | re.DOTALL)
+        # Some providers emit an opening <think> without a closing tag.
+        if t.lstrip().lower().startswith("<think>"):
+            t = re.sub(r"^\s*<think>", "", t, flags=re.IGNORECASE)
+            parts = re.split(r"\n\s*\n", t, maxsplit=1)
+            if len(parts) == 2:
+                t = parts[1]
+        return t.strip()
+
+    def _generate_text_response(
+        self,
+        prompt: str,
+        *,
+        system_prompt: str,
+        max_tokens: int = 800,
+        temperature: float = 0.6,
+    ) -> str:
+        if NVIDIA_API_KEY:
+            try:
+                payload = {
+                    "model": NVIDIA_CHAT_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "temperature": temperature,
+                    "max_tokens": max_tokens,
+                }
+                r = self.session.post(
+                    NVIDIA_CHAT_URL,
+                    headers={
+                        "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=45,
+                )
+                r.raise_for_status()
+                raw = (
+                    r.json().get("choices", [{}])[0].get("message", {}).get("content", "")
+                )
+                cleaned = self._extract_model_text(raw)
+                if cleaned:
+                    return cleaned
+            except Exception as e:
+                print(f"  ⚠ NVIDIA text generation error: {self._trim_error(e)}")
+
+        if DEEPSEEK_API_KEY:
+            try:
+                payload = {
+                    "model": DEEPSEEK_MODEL,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": prompt},
+                    ],
+                    "max_tokens": max(256, max_tokens * 4),
+                    "temperature": temperature,
+                }
+                r = self.session.post(
+                    f"{DEEPSEEK_BASE_URL}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json=payload,
+                    timeout=30,
+                )
+                r.raise_for_status()
+                raw = (
+                    r.json()
+                    .get("choices", [{}])[0]
+                    .get("message", {})
+                    .get("content", "")
+                )
+                cleaned = self._extract_model_text(raw)
+                if cleaned:
+                    return cleaned
+            except Exception as e:
+                print(f"  ⚠ DeepSeek text generation error: {self._trim_error(e)}")
+
+        return ""
+
+    def _decode_nvidia_image_payload(self, image_value: str) -> Optional[bytes]:
+        raw = (image_value or "").strip()
+        if not raw:
             return None
-        payload = image_field.strip()
-        if payload.startswith("data:"):
-            parts = payload.split(",", 1)
-            if len(parts) != 2:
+        if raw.startswith("data:"):
+            try:
+                raw = raw.split(",", 1)[1]
+            except Exception:
                 return None
-            payload = parts[1]
         try:
-            return base64.b64decode(payload)
+            return base64.b64decode(raw)
         except Exception:
             return None
 
-    def _generate_nvidia_image(
-        self, title: str, artist: str, genre: str
-    ) -> Optional[str]:
-        """Generate image via NVIDIA SD3 endpoint and return uploaded/public image URL."""
+    def _generate_nvidia_image(self, title: str, artist: str, genre: str) -> Optional[str]:
         if not NVIDIA_API_KEY:
             return None
-
         prompt = (
             "Create a photorealistic editorial hero image for a music news card. "
-            "No text, no logo, no watermark, no collage. "
+            "No text, no logo, no watermark. "
             f"Artist focus: {artist or 'unknown artist'}. "
             f"Genre context: {genre or 'mixed'}. "
             f"Headline context: {title[:180]}."
         )
         try:
-            resp = self.session.post(
+            r = self.session.post(
                 NVIDIA_IMAGE_URL,
                 headers={
                     "Authorization": f"Bearer {NVIDIA_API_KEY}",
@@ -641,159 +670,19 @@ class RSSScraper:
                 json={"prompt": prompt},
                 timeout=60,
             )
-            if resp.status_code != 200:
-                self._log_event(
-                    "nvidia_image_generation_failed",
-                    level="warning",
-                    status_code=resp.status_code,
-                    error=resp.text[:300],
-                )
-                return None
-
-            data = resp.json()
-            if data.get("finish_reason") not in {"SUCCESS", "success"}:
-                self._log_event(
-                    "nvidia_image_generation_failed",
-                    level="warning",
-                    status=data.get("finish_reason", "unknown"),
-                )
-                return None
-
+            r.raise_for_status()
+            data = r.json()
             image_bytes = self._decode_nvidia_image_payload(data.get("image", ""))
             if not image_bytes:
-                self._log_event(
-                    "nvidia_image_no_data",
-                    level="warning",
-                    finish_reason=data.get("finish_reason", "unknown"),
-                )
                 return None
-
-            self._log_event(
-                "nvidia_image_generation_ok",
-                seed=data.get("seed"),
-                size_kb=len(image_bytes) // 1024,
-            )
+            print(f"  ✓ NVIDIA generated image ({len(image_bytes) // 1024}KB)")
             return self._compress_and_upload_bytes(image_bytes, title)
         except Exception as e:
-            self._log_event(
-                "nvidia_image_generation_failed",
-                level="warning",
-                error=str(e),
-            )
+            print(f"  ⚠ NVIDIA image generation failed: {self._trim_error(e)}")
             return None
 
-    def _generate_gemini_image(
-        self, title: str, artist: str, genre: str
-    ) -> Optional[str]:
-        """Generate an image via Gemini, compress to WebP, upload to Firebase Storage.
-
-        Uses the gemini-2.5-flash-image model which returns base64 data directly.
-        Requires Firebase Storage for persistence (base64 is too large for Firestore).
-        Returns a permanent public URL from Firebase Storage, or None on failure.
-        """
-        if not GEMINI_API_KEY:
-            return None
-
-        api_url = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/"
-            f"{GEMINI_IMAGE_MODEL}:generateContent"
-        )
-        prompt_attempts = [
-            (
-                "Create a photorealistic editorial hero image for a music news card. "
-                "No text, no logo, no watermark, no collage. "
-                f"Artist focus: {artist or 'unknown artist'}. "
-                f"Genre context: {genre or 'mixed'}. "
-                f"Headline context: {title[:180]}."
-            ),
-            (
-                "Generate a cinematic music-magazine hero photo. "
-                "Single scene, realistic lighting, people/instruments allowed, no text overlays. "
-                f"Genre: {genre or 'mixed'}. Artist cue: {artist or 'unknown artist'}."
-            ),
-            (
-                "Create an abstract-but-photoreal music atmosphere image suitable for a news card. "
-                "No text, no logos, no brand marks, no collage. "
-                f"Theme: {genre or 'mixed'} music news."
-            ),
-        ]
-
-        for attempt, prompt in enumerate(prompt_attempts, start=1):
-            payload = json.dumps(
-                {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {
-                        "responseModalities": ["TEXT", "IMAGE"],
-                    },
-                }
-            )
-
-            try:
-                resp = self.session.post(
-                    api_url,
-                    data=payload,
-                    headers={
-                        "x-goog-api-key": GEMINI_API_KEY,
-                        "Content-Type": "application/json",
-                    },
-                    timeout=60,
-                )
-                if resp.status_code != 200:
-                    print(
-                        f"  ⚠ Gemini API error (attempt {attempt}): {resp.status_code} — {resp.text[:160]}"
-                    )
-                    self._log_event(
-                        "gemini_image_generation_failed",
-                        level="warning",
-                        model=GEMINI_IMAGE_MODEL,
-                        status_code=resp.status_code,
-                        attempt=attempt,
-                        error=resp.text[:300],
-                    )
-                    if "expired" in resp.text.lower() or "api key" in resp.text.lower():
-                        return None
-                    time.sleep(1.2)
-                    continue
-
-                data = resp.json()
-                parts = (
-                    data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-                )
-
-                for part in parts:
-                    inline = part.get("inlineData") or part.get("inline_data")
-                    if not inline or not inline.get("data"):
-                        continue
-
-                    image_bytes = base64.b64decode(inline["data"])
-                    mime = inline.get("mimeType") or inline.get(
-                        "mime_type", "image/png"
-                    )
-                    print(
-                        f"  ✓ Gemini generated image ({len(image_bytes) // 1024}KB, {mime})"
-                    )
-                    return self._compress_and_upload_bytes(image_bytes, title)
-
-                print(f"  ⚠ Gemini response had no image data (attempt {attempt})")
-                self._log_event(
-                    "gemini_image_no_data",
-                    level="warning",
-                    model=GEMINI_IMAGE_MODEL,
-                    attempt=attempt,
-                )
-                time.sleep(1.2)
-            except Exception as e:
-                print(f"  ⚠ Gemini image generation failed (attempt {attempt}): {e}")
-                self._log_event(
-                    "gemini_image_generation_failed",
-                    level="warning",
-                    model=GEMINI_IMAGE_MODEL,
-                    attempt=attempt,
-                    error=str(e),
-                )
-                time.sleep(1.2)
-
-        return None
+    # _generate_gemini_image removed 2026-04-20 — NVIDIA SD3 (_generate_nvidia_image) is the
+    # sole image-gen path. If NVIDIA fails the image flow returns ("", "none").
 
     def _compress_and_upload_bytes(
         self, image_bytes: bytes, title: str
@@ -899,58 +788,43 @@ class RSSScraper:
         if generated:
             return generated, "ai_generated_nvidia"
 
-        generated = self._generate_gemini_image(
-            title,
-            artist_names[0] if artist_names else "",
-            primary_genre,
-        )
-        if generated:
-            return generated, "ai_generated_gemini"
-
         return "", "none"
 
     def summarize_with_gemini(self, title: str, content: str) -> str:
-        """Summarize article into clean, exact-60-word copy for storage."""
-        content = self._clean_summary_text(content)
+        """Summarize article to ~60 words via NVIDIA (primary) / DeepSeek (fallback).
 
+        Name retained for backward compatibility with existing call sites.
+        Internally routes through _generate_text_response (no Gemini dependency).
+        """
         # If content is too sparse, try fetching the source URL from title context
         if len(content.split()) < 40 and content.startswith("http"):
-            content = self._clean_summary_text(
-                self._fetch_article_text(content) or content
-            )
+            content = self._fetch_article_text(content) or content
 
-        fallback_summary = self._force_exact_60_summary(title, content)
-
-        if not NVIDIA_API_KEY and not GEMINI_API_KEY:
-            return fallback_summary
-
-        prompt = f"""Write a 60-word music news summary. Count every word carefully and return exactly 60 words.
+        prompt = f"""Write a 60-word music news summary. Count every word carefully — it must be between 55 and 65 words.
 
 Title: {title}
 
 Article: {content[:2000]}
 
 Rules:
-- MUST be exactly 60 words
+- MUST be 55–65 words (count carefully before responding)
 - Include the artist name, the news development, and why it matters
-- Punchy music-journalist tone with no filler
-- If the article is thin, use context from the title and available article details
+- Punchy music-journalist tone — no filler, no fluff
+- If article is thin, expand with context about the artist or event
 - Do NOT start with "Summary:" or the title
-- Return only the summary text
 - If this is clearly not music-related, say SKIP
 
 Your 60-word summary:"""
 
         try:
             summary = self._generate_text_response(
-                prompt=prompt,
+                prompt,
                 system_prompt=(
-                    "You are a professional music journalist writing concise 60-word "
-                    "news briefs. Return exactly 60 words of clean plain text."
+                    "You are a professional music journalist writing 60-word news briefs. "
+                    "Always write the full summary; no preface, no markdown."
                 ),
+                max_tokens=420,
                 temperature=0.7,
-                max_tokens=600,
-                timeout=30,
             )
 
             if (
@@ -958,56 +832,50 @@ Your 60-word summary:"""
                 or self._is_refusal(summary)
                 or summary.upper().startswith("SKIP")
             ):
-                print("  ? Summary generation skipped/refused, using exact-60 fallback")
-                return fallback_summary
+                print("  ⚠ Model refused/skipped summary, using fallback")
+                words = content.split()
+                return " ".join(words[:60]) + "." if words else title
 
-            summary = self._clean_summary_text(summary)
             words = summary.split()
+            if len(words) > 70:
+                summary = " ".join(words[:70]) + "."
 
-            if len(words) < 55:
+            if len(words) < 40:
                 summary = self._expand_summary_gemini(title, content, summary)
-                summary = self._clean_summary_text(summary)
-                words = summary.split()
-
-            if len(words) != 60:
-                print(
-                    f"  ? Summary came back at {len(words)} words, normalizing to 60"
-                )
-                return self._force_exact_60_summary(title, summary or content)
 
             return summary
         except Exception as e:
-            print(f"  ? Summary generation error: {e}, using exact-60 fallback")
-            return fallback_summary
+            print(f"  ⚠ Summary generation error: {e}, using fallback")
+            words = content.split()
+            return " ".join(words[:60]) + "." if words else title
 
     def _expand_summary_gemini(
         self, title: str, content: str, short_summary: str
     ) -> str:
-        """If initial summary is too short, ask the model for a clean 60-word retry."""
-        prompt = f"""This summary is too short. Rewrite it as exactly 60 words.
+        """If initial summary is too short, expand via NVIDIA / DeepSeek.
+
+        Name retained for backward compatibility. No Gemini dependency.
+        """
+        prompt = f"""This summary is too short. Expand it to exactly 60 words.
 
 Title: {title}
 Original article: {content[:1000]}
 Short draft: {short_summary}
 
-Rules:
-- Return exactly 60 words
-- Keep it factual, punchy, and music-news focused
-- Return only the summary text"""
+Rewrite as a full 60-word music news brief. Count each word. Return only the summary text."""
+
         try:
             expanded = self._generate_text_response(
-                prompt=prompt,
-                system_prompt=(
-                    "Expand short music-news drafts into complete 60-word briefs. "
-                    "Return exactly 60 words of plain text."
-                ),
+                prompt,
+                system_prompt="Rewrite to a complete 60-word music news brief. Return only the summary.",
+                max_tokens=360,
                 temperature=0.6,
-                max_tokens=400,
-                timeout=20,
             )
-            expanded = self._clean_summary_text(expanded)
-            if expanded and self._summary_word_count(expanded) >= 55:
-                return expanded
+            if expanded and len(expanded.split()) >= 40:
+                words = expanded.split()
+                return " ".join(words[:70]) + (
+                    "." if not expanded.rstrip().endswith(".") else ""
+                )
         except Exception:
             pass
         return short_summary
@@ -1091,152 +959,6 @@ Rules:
         text = re.sub(r"\[[\d,\s]+\]", "", text)  # [1][2] → ""
         text = text.strip("\"'")
         return text.strip()
-
-    @staticmethod
-    def _clean_summary_text(text: str) -> str:
-        """Convert scraped HTML-heavy text into plain readable copy."""
-        if not text:
-            return ""
-
-        clean = html.unescape(text)
-        clean = re.sub(r"<!--.*?-->", " ", clean, flags=re.DOTALL)
-        clean = re.sub(
-            r"<script[^>]*>.*?</script>", " ", clean, flags=re.IGNORECASE | re.DOTALL
-        )
-        clean = re.sub(
-            r"<style[^>]*>.*?</style>", " ", clean, flags=re.IGNORECASE | re.DOTALL
-        )
-        clean = re.sub(r"<[^>]+>", " ", clean)
-        clean = re.sub(r"\s+", " ", clean)
-        return clean.strip()
-
-    @staticmethod
-    def _summary_word_count(text: str) -> int:
-        return len((text or '').split())
-
-    def _force_exact_60_summary(self, title: str, content: str) -> str:
-        """Build a clean deterministic 60-word fallback from title and article text."""
-        source = self._clean_summary_text(f"{title}. {content}")
-        words = source.split()
-
-        if not words:
-            words = self._clean_summary_text(title).split()
-
-        if not words:
-            words = [
-                'Music', 'news', 'update', 'details', 'remain', 'limited', 'for',
-                'now', 'but', 'this', 'story', 'has', 'been', 'flagged', 'for',
-                'follow-up', 'reporting', 'as', 'more', 'verified', 'information',
-                'becomes', 'available', 'from', 'official', 'sources', 'and',
-                'artist', 'representatives', 'in', 'the', 'hours', 'ahead',
-            ]
-
-        filler = (
-            'Additional reporting context remains limited, so this brief highlights '
-            'the confirmed update, the key artist involved, and why the development '
-            'matters for fans watching the story unfold right now.'
-        ).split()
-
-        cleaned_words = []
-        for word in words + filler:
-            normalized = word.strip()
-            if normalized:
-                cleaned_words.append(normalized)
-            if len(cleaned_words) >= 60:
-                break
-
-        if len(cleaned_words) < 60:
-            cleaned_words.extend(filler[: 60 - len(cleaned_words)])
-
-        summary = ' '.join(cleaned_words[:60]).strip(' .,;:-')
-        if summary and summary[-1] not in '.!?':
-            summary += '.'
-        return summary
-
-    def _generate_text_response(
-        self,
-        prompt: str,
-        system_prompt: str,
-        temperature: float,
-        max_tokens: int,
-        timeout: int,
-    ) -> str:
-        """Generate text using NVIDIA first, with Gemini as fallback."""
-        if NVIDIA_API_KEY:
-            nvidia_timeout = min(timeout, 30)
-            for model in NVIDIA_CHAT_MODELS:
-                payload = {
-                    "model": model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": prompt},
-                    ],
-                    "temperature": temperature,
-                    "max_tokens": max_tokens,
-                }
-                try:
-                    resp = requests.post(
-                        NVIDIA_CHAT_URL,
-                        headers={
-                            "Authorization": f"Bearer {NVIDIA_API_KEY}",
-                            "Content-Type": "application/json",
-                        },
-                        json=payload,
-                        timeout=nvidia_timeout,
-                    )
-                    if resp.status_code == 429:
-                        print(f"  [warn] NVIDIA rate-limited on {model}, trying next model...")
-                        time.sleep(0.75)
-                        continue
-                    resp.raise_for_status()
-                    content = (
-                        resp.json()
-                        .get("choices", [{}])[0]
-                        .get("message", {})
-                        .get("content")
-                    )
-                    content = (content or "").strip()
-                    if content:
-                        return content
-                except requests.Timeout:
-                    print(f"  [warn] NVIDIA timeout on {model}, trying next model...")
-                    continue
-                except requests.RequestException as exc:
-                    print(
-                        f"  [warn] NVIDIA error on {model}: {self._trim_error(exc)}, "
-                        "trying next model..."
-                    )
-                    continue
-
-        if not GEMINI_API_KEY:
-            raise RuntimeError("No NVIDIA_API_KEY or GEMINI_API_KEY configured")
-
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "systemInstruction": {"parts": [{"text": system_prompt}]},
-            "generationConfig": {
-                "maxOutputTokens": min(max_tokens * 4, 4096),
-                "temperature": temperature,
-            },
-        }
-        resp = requests.post(
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
-            headers={
-                "x-goog-api-key": GEMINI_API_KEY,
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=timeout,
-        )
-        resp.raise_for_status()
-        text = (
-            resp.json()
-            .get("candidates", [{}])[0]
-            .get("content", {})
-            .get("parts", [{}])[0]
-            .get("text")
-        )
-        return (text or "").strip()
 
     def research_with_exa(self, artist: str, topic: str) -> str:
         """Research article topic using Exa search for deeper insights."""
@@ -1349,30 +1071,30 @@ New CTA Headline:"""
                     max_tokens=100,
                     temperature=0.8,
                 )
-                headline = (result.choices[0].message.content or "").strip()
+                headline = result.choices[0].message.content.strip()
                 headline = self._clean_perplexity_text(headline)
 
                 if not self._is_refusal(headline):
                     if len(headline) > 100:
                         headline = headline[:97] + "..."
                     return headline
-                print("  ⚠ Perplexity refused headline, trying Gemini...")
+                print("  ⚠ Perplexity refused headline, trying NVIDIA fallback...")
             except Exception as e:
                 self._disable_perplexity_if_needed(e, "cta_headline")
                 print(
-                    f"  ⚠ CTA headline error: {self._trim_error(e)}, trying Gemini..."
+                    f"  ⚠ CTA headline error: {self._trim_error(e)}, trying NVIDIA fallback..."
                 )
 
-        # Gemini fallback for CTA headline
-        if GEMINI_API_KEY:
-            return self._generate_cta_headline_gemini(clean_title, content, artist)
-
-        return self._transform_title_fallback(clean_title)
+        # Fallback path: NVIDIA / DeepSeek via _generate_text_response
+        return self._generate_cta_headline_gemini(clean_title, content, artist)
 
     def _generate_cta_headline_gemini(
         self, title: str, content: str, artist: str
     ) -> str:
-        """Generate CTA headline via NVIDIA/Gemini when Perplexity is unavailable."""
+        """Generate CTA headline via NVIDIA / DeepSeek when Perplexity is unavailable.
+
+        Name retained for backward compatibility. No Gemini dependency.
+        """
         prompt = f"""Write a punchy, click-worthy music news headline.
 
 Original: {title}
@@ -1387,22 +1109,18 @@ Rules:
 
 Headline:"""
 
-        try:
-            headline = self._generate_text_response(
-                prompt=prompt,
-                system_prompt=(
-                    "You are a viral headline writer for a music news app. "
-                    "Return only the headline text with no markdown or explanation."
-                ),
-                temperature=0.9,
-                max_tokens=120,
-                timeout=15,
-            )
-            headline = self._clean_summary_text(headline)
-            if headline and not self._is_refusal(headline):
-                return headline[:100]
-        except Exception as e:
-            print(f"  ⚠ CTA generation error: {e}")
+        system_prompt = (
+            "You are a viral headline writer for a music news app. "
+            "Return ONLY one headline, with no explanations."
+        )
+        headline = self._generate_text_response(
+            prompt,
+            system_prompt=system_prompt,
+            max_tokens=120,
+            temperature=0.9,
+        )
+        if headline and not self._is_refusal(headline):
+            return headline[:100]
         return self._transform_title_fallback(title)
 
     def _transform_title_fallback(self, original_title: str) -> str:
@@ -1696,7 +1414,7 @@ Headline:"""
             return False
 
     def save_to_firebase(self, article: Article):
-        """Save article to Firebase Firestore, preferring Admin SDK when available."""
+        """Save article to Firebase Firestore via REST API"""
         try:
             article_dict = asdict(article)
             article_dict["published_at"] = article.published_at.isoformat()
@@ -1738,11 +1456,6 @@ Headline:"""
                     article_dict["full_content"][:3997] + "..."
                 )
 
-            # Firestore rules require string type for image_url/location.
-            # Normalize nullable values to empty string so constrained writes pass.
-            article_dict["image_url"] = article_dict.get("image_url") or ""
-            article_dict["location"] = article_dict.get("location") or ""
-
             canonical_url = self._normalize_url(article_dict["source_url"])
             doc_id = self._build_doc_id(
                 Article(
@@ -1753,52 +1466,32 @@ Headline:"""
                 )
             )
 
-            if _firestore_db is not None:
-                try:
-                    _firestore_db.collection("articles").document(doc_id).set(
-                        article_dict
-                    )
-                    print(f"  ✓ Saved (admin): {article.title[:60]}...")
-                    self._log_event(
-                        "save_ok_admin",
-                        doc_id=doc_id,
-                        title=article.title,
-                        source=article.source,
-                    )
-                    if canonical_url:
-                        self.existing_source_urls.add(canonical_url)
-                    self.existing_titles.add((article.title or "").lower().strip())
-                    for name in article.artist_names or []:
-                        key = name.lower().strip()
-                        if key:
-                            self.existing_artist_counts[key] = (
-                                self.existing_artist_counts.get(key, 0) + 1
-                            )
-                    return True
-                except Exception as exc:
-                    print(f"  ⚠ Admin Firestore save failed, falling back to REST: {exc}")
-                    self._log_event(
-                        "save_admin_failed",
-                        level="warning",
-                        doc_id=doc_id,
-                        title=article.title,
-                        error=str(exc),
-                    )
-
-            if not API_KEY:
-                print("  ✗ Failed to save: FIREBASE_API_KEY is missing")
-                self._log_event(
-                    "save_failed",
-                    level="error",
-                    reason="missing_api_key",
-                    title=article.title,
-                )
-                return False
-
-            url = f"{FIRESTORE_URL}/articles/{doc_id}?key={API_KEY}"
+            base_url = f"{FIRESTORE_URL}/articles/{doc_id}"
             payload = {"fields": self.convert_to_firestore_fields(article_dict)}
 
-            response = requests.patch(url, json=payload, timeout=10)
+            sa_b64 = os.getenv("FIREBASE_SERVICE_ACCOUNT_B64", "")
+            if sa_b64:
+                from google.auth.transport.requests import AuthorizedSession
+                from google.oauth2 import service_account
+
+                sa_info = json.loads(base64.b64decode(sa_b64))
+                creds = service_account.Credentials.from_service_account_info(
+                    sa_info, scopes=["https://www.googleapis.com/auth/datastore"]
+                )
+                response = AuthorizedSession(creds).patch(
+                    base_url, json=payload, timeout=10
+                )
+            else:
+                if not API_KEY:
+                    print("  ✗ Failed to save: no Firestore auth (set FIREBASE_SERVICE_ACCOUNT_B64 or FIREBASE_API_KEY)")
+                    self._log_event(
+                        "save_failed",
+                        level="error",
+                        reason="missing_firestore_auth",
+                        title=article.title,
+                    )
+                    return False
+                response = requests.patch(f"{base_url}?key={API_KEY}", json=payload, timeout=10)
 
             if response.status_code in [200, 201]:
                 print(f"  ✓ Saved: {article.title[:60]}...")
@@ -1835,7 +1528,10 @@ Headline:"""
                     compat_payload = {
                         "fields": self.convert_to_firestore_fields(compat_dict)
                     }
-                    compat_resp = requests.patch(url, json=compat_payload, timeout=10)
+                    if sa_b64:
+                        compat_resp = AuthorizedSession(creds).patch(base_url, json=compat_payload, timeout=10)
+                    else:
+                        compat_resp = requests.patch(f"{base_url}?key={API_KEY}", json=compat_payload, timeout=10)
                     if compat_resp.status_code in (200, 201):
                         print(f"  ✓ Saved (compat): {article.title[:60]}...")
                         self._log_event(
@@ -1950,14 +1646,13 @@ Headline:"""
                     artist_names=artists,
                     primary_genre=primary_genre,
                 )
-                epk_url, epk_status = self.resolve_epk(artists)
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
                     title=cta_title,  # Use CTA headline, not original
                     summary=summary,
                     full_content=content_with_research[:2000],
-                    source=source_name.replace("_", " ").title(),
+                    source=source_config.get("display_name") or source_name.replace("_", " ").title(),
                     source_url=self._normalize_source_url(item["link"]),
                     primary_genre=primary_genre,
                     secondary_genres=secondary_genres,
@@ -1972,8 +1667,6 @@ Headline:"""
                     fetched_at=datetime.now(),
                     image_source=image_source,
                     location=item.get("location", ""),
-                    epk_url=epk_url,
-                    epk_status=epk_status,
                 )
 
                 if self.save_to_firebase(article):
@@ -2056,10 +1749,10 @@ Headline:"""
     def _discover_perplexity_fallback(self) -> Tuple[int, int]:
         """Fallback discovery using Perplexity when Exa is unavailable."""
         if not _perplexity_client or self.perplexity_disabled:
-            print("  ⚠ Neither Exa nor Perplexity available for discovery.")
+            print("  ⚠ Perplexity not available for discovery.")
             return 0, 0
 
-        print("\n🔎 Discovering articles via Perplexity (Exa fallback)...")
+        print("\n🔎 Discovering articles via Perplexity...")
         items: List[Dict] = []
 
         for query, _genre_hint in self.EXA_QUERIES:
@@ -2161,7 +1854,6 @@ Headline:"""
                     artist_names=artists,
                     primary_genre=primary_genre,
                 )
-                epk_url, epk_status = self.resolve_epk(artists)
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
@@ -2182,8 +1874,6 @@ Headline:"""
                     view_count=0,
                     fetched_at=datetime.now(),
                     image_source=image_source,
-                    epk_url=epk_url,
-                    epk_status=epk_status,
                 )
 
                 if self.save_to_firebase(article):
@@ -2196,6 +1886,136 @@ Headline:"""
 
         print(
             f"  [perplexity_discovery] items={len(items)} "
+            f"saved={processed} duplicates={duplicates} errors={errors}"
+        )
+        return processed, len(items)
+
+    def discover_ddgs_articles(self) -> Tuple[int, int]:
+        """Discover supplementary music articles via DDGS web search."""
+        if not _ddgs_client:
+            print("\n⚠ DDGS client unavailable, skipping")
+            return 0, 0
+
+        print("\n🔎 Discovering articles via DDGS (supplementary)...")
+        items: List[Dict] = []
+        seen_urls: Set[str] = set()
+
+        # Keep DDGS broad but bounded; use recent-oriented query phrasing.
+        ddgs_queries = list(self.EXA_QUERIES) + list(self.EXA_LOCATION_QUERIES[:6])
+
+        for query, genre_hint in ddgs_queries:
+            q = f"{query} latest music news"
+            try:
+                try:
+                    results = list(_ddgs_client.text(q, max_results=8, timelimit="w"))
+                except TypeError:
+                    # Older ddgs versions may not support timelimit.
+                    results = list(_ddgs_client.text(q, max_results=8))
+
+                for r in results:
+                    url = (r.get("href") or r.get("url") or "").strip()
+                    title = (r.get("title") or "").strip()
+                    body = (r.get("body") or r.get("snippet") or "").strip()
+                    if not url or not title or not url.startswith("http"):
+                        continue
+                    normalized = self._normalize_url(url)
+                    if normalized in seen_urls:
+                        continue
+                    if not self._is_article_url(url):
+                        continue
+                    seen_urls.add(normalized)
+                    items.append(
+                        {
+                            "title": title,
+                            "link": url,
+                            "description": body[:500],
+                            "content": body,
+                            "pub_date": "",
+                            "image": None,
+                            "genre_hint": genre_hint,
+                        }
+                    )
+            except Exception as e:
+                print(f"  ? DDGS query error ({query[:40]}...): {e}")
+
+        print(f"  Found {len(items)} DDGS results")
+        if not items:
+            return 0, 0
+
+        processed = 0
+        duplicates = 0
+        errors = 0
+
+        for item in items:
+            try:
+                original_title = item["title"]
+                content = item["content"] or item["description"]
+
+                if self.check_duplicate(original_title, item["link"]):
+                    duplicates += 1
+                    continue
+
+                if not self.is_music_relevant(original_title, content, "discovery"):
+                    continue
+
+                artists = self.extract_artists(original_title, content)
+                main_artist = artists[0] if artists else ""
+
+                if self._artist_limit_reached(artists):
+                    continue
+
+                cta_title = self.generate_cta_headline(
+                    original_title, content, main_artist
+                )
+
+                if cta_title.lower().strip() in self.existing_titles:
+                    continue
+
+                summary = self.summarize_with_gemini(cta_title, content)
+                primary_genre, secondary_genres = self.classify_genre(
+                    original_title, content, item.get("genre_hint", "mixed")
+                )
+
+                pub_date = self.parse_pub_date(item.get("pub_date", ""))
+                image_url, image_source = self.resolve_article_image(
+                    item,
+                    title=cta_title,
+                    artist_names=artists,
+                    primary_genre=primary_genre,
+                )
+
+                source_label = self._outlet_name_from_url(item["link"])
+
+                article = Article(
+                    id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
+                    title=cta_title,
+                    summary=summary,
+                    full_content=content[:2000],
+                    source=source_label,
+                    source_url=self._normalize_source_url(item["link"]),
+                    primary_genre=primary_genre,
+                    secondary_genres=secondary_genres,
+                    artist_names=artists,
+                    image_url=image_url,
+                    published_at=pub_date,
+                    read_time=60,
+                    share_count=0,
+                    email_count=0,
+                    bookmark_count=0,
+                    view_count=0,
+                    fetched_at=datetime.now(),
+                    image_source=image_source,
+                )
+
+                if self.save_to_firebase(article):
+                    processed += 1
+            except Exception as e:
+                errors += 1
+                print(f"  ? Error processing DDGS item: {e}")
+                continue
+
+        print(
+            f"  [ddgs_discovery] items={len(items)} "
             f"saved={processed} duplicates={duplicates} errors={errors}"
         )
         return processed, len(items)
@@ -2285,6 +2105,265 @@ Headline:"""
             return base.title()
         except Exception:
             return "Music News"
+
+    def _discover_brave(self) -> Tuple[int, int]:
+        """Discover fresh music news via Brave Search News API."""
+        if not BRAVE_API_KEY:
+            print("  ⚠ BRAVE_API_KEY not set, skipping Brave discovery")
+            return 0, 0
+
+        print("\n🔎 Discovering articles via Brave Search...")
+        import urllib.request
+
+        items: List[Dict] = []
+        seen_urls: Set[str] = set()
+
+        all_queries = list(self.EXA_QUERIES) + list(self.EXA_LOCATION_QUERIES)
+
+        for query, genre_hint in all_queries:
+            try:
+                encoded_query = urllib.parse.quote(query)
+                url = (
+                    f"https://api.search.brave.com/res/v1/news/search"
+                    f"?q={encoded_query}&count=5&freshness=pw"
+                )
+                req = urllib.request.Request(
+                    url,
+                    headers={
+                        "Accept": "application/json",
+                        "Accept-Encoding": "gzip",
+                        "X-Subscription-Token": BRAVE_API_KEY,
+                    },
+                )
+                with urllib.request.urlopen(req, timeout=15) as resp:
+                    import gzip as _gzip
+                    raw_bytes = resp.read()
+                    if resp.info().get("Content-Encoding") == "gzip":
+                        raw_bytes = _gzip.decompress(raw_bytes)
+                    data = json.loads(raw_bytes.decode("utf-8"))
+
+                for r in data.get("results", []):
+                    article_url = (r.get("url") or "").strip()
+                    title = (r.get("title") or "").strip()
+                    description = (r.get("description") or "").strip()
+                    age = r.get("age", "")
+                    if not article_url or not title:
+                        continue
+                    if not article_url.startswith("http"):
+                        continue
+                    normalized = self._normalize_url(article_url)
+                    if normalized in seen_urls:
+                        continue
+                    if not self._is_article_url(article_url):
+                        continue
+                    seen_urls.add(normalized)
+                    items.append(
+                        {
+                            "title": title,
+                            "link": article_url,
+                            "description": description[:500],
+                            "content": description,
+                            "pub_date": age,
+                            "image": None,
+                            "genre_hint": genre_hint,
+                        }
+                    )
+            except Exception as e:
+                print(f"  ⚠ Brave query error ({query[:40]}...): {e}")
+                continue
+
+        print(f"  Found {len(items)} Brave Search discovery results")
+
+        processed = 0
+        duplicates = 0
+        errors = 0
+
+        for item in items:
+            try:
+                original_title = item["title"]
+                content = item["content"] or item["description"]
+
+                # Skip URL patterns that indicate index/listing pages
+                skip = False
+                for pat in self._EXA_SKIP_URL_PATTERNS:
+                    if re.search(pat, item["link"], re.IGNORECASE):
+                        skip = True
+                        break
+                if skip:
+                    continue
+
+                if self.check_duplicate(original_title, item["link"]):
+                    duplicates += 1
+                    continue
+
+                if not self.is_music_relevant(original_title, content, "discovery"):
+                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
+                    continue
+
+                artists = self.extract_artists(original_title, content)
+                main_artist = artists[0] if artists else ""
+
+                if self._artist_limit_reached(artists):
+                    print(f"  ⛔ Artist cap reached: {main_artist[:40]}")
+                    continue
+
+                print(f"  📝 Generating CTA headline...")
+                cta_title = self.generate_cta_headline(
+                    original_title, content, main_artist
+                )
+
+                if cta_title.lower().strip() in self.existing_titles:
+                    print(f"  ⚠ Duplicate CTA title: {cta_title[:50]}...")
+                    continue
+
+                summary = self.summarize_with_gemini(cta_title, content)
+
+                primary_genre, secondary_genres = self.classify_genre(
+                    original_title, content, item.get("genre_hint", "mixed")
+                )
+
+                pub_date = self.parse_pub_date(item.get("pub_date", ""))
+                image_url, image_source = self.resolve_article_image(
+                    item,
+                    title=cta_title,
+                    artist_names=artists,
+                    primary_genre=primary_genre,
+                )
+
+                article = Article(
+                    id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
+                    title=cta_title,
+                    summary=summary,
+                    full_content=content[:2000],
+                    source="Brave Discovery",
+                    source_url=self._normalize_source_url(item["link"]),
+                    primary_genre=primary_genre,
+                    secondary_genres=secondary_genres,
+                    artist_names=artists,
+                    image_url=image_url,
+                    published_at=pub_date,
+                    read_time=60,
+                    share_count=0,
+                    email_count=0,
+                    bookmark_count=0,
+                    view_count=0,
+                    fetched_at=datetime.now(),
+                    image_source=image_source,
+                )
+
+                if self.save_to_firebase(article):
+                    processed += 1
+
+            except Exception as e:
+                errors += 1
+                print(f"  ✗ Error processing Brave item: {e}")
+                continue
+
+        print(
+            f"  [brave_discovery] items={len(items)} "
+            f"saved={processed} duplicates={duplicates} errors={errors}"
+        )
+        return processed, len(items)
+
+    def _discover_reddit(self) -> Tuple[int, int]:
+        """Discover fresh music posts from curated subreddits (Phase C5).
+
+        Thin adapter over reddit_discovery.discover_reddit(): pulls filtered posts,
+        runs them through the same dedup / artist-cap / image / save pipeline as
+        other discovery paths. Reddit post titles are already curated by the
+        community (e.g. [FRESH], [FRESH ALBUM] tags) — we skip the CTA/Gemini
+        rewrite pass to preserve that signal.
+        """
+        try:
+            from reddit_discovery import discover_reddit
+        except ImportError:
+            self._log_event("reddit_import_failed", level="warn")
+            return 0, 0
+
+        print("\n🔎 Discovering articles via Reddit...")
+        reject_url = lambda u: not self._is_article_url(u)
+        reddit_articles = discover_reddit(
+            self.session,
+            log_fn=self._log_event,
+            reject_url_fn=reject_url,
+        )
+
+        if not reddit_articles:
+            return 0, 0
+
+        print(f"  Found {len(reddit_articles)} Reddit discovery results")
+
+        processed = 0
+        duplicates = 0
+        errors = 0
+
+        for item in reddit_articles:
+            try:
+                original_title = item["title"]
+                content = item.get("summary") or item.get("title") or ""
+                source_url = self._normalize_source_url(item["source_url"])
+
+                if self.check_duplicate(original_title, source_url):
+                    duplicates += 1
+                    continue
+
+                artists = self.extract_artists(original_title, content)
+
+                if self._artist_limit_reached(artists):
+                    continue
+
+                primary_genre, secondary_genres = self.classify_genre(
+                    original_title, content, item.get("genre", "mixed")
+                )
+
+                try:
+                    published_at = datetime.fromisoformat(
+                        item["published_at"].replace("Z", "+00:00")
+                    )
+                except (KeyError, ValueError, AttributeError):
+                    published_at = datetime.now(tz=timezone.utc)
+
+                image_url, image_source = self.resolve_article_image(
+                    {"image": None, "link": source_url, "title": original_title},
+                    title=original_title,
+                    artist_names=artists,
+                    primary_genre=primary_genre,
+                )
+
+                article = Article(
+                    id=re.sub(r"[^a-zA-Z0-9]", "-", original_title.lower())[:50],
+                    title=original_title,
+                    summary=content[:300],
+                    full_content=content[:2000],
+                    source=item.get("source", "r/unknown"),
+                    source_url=source_url,
+                    primary_genre=primary_genre,
+                    secondary_genres=secondary_genres,
+                    artist_names=artists,
+                    image_url=image_url,
+                    published_at=published_at,
+                    read_time=60,
+                    share_count=0,
+                    email_count=0,
+                    bookmark_count=0,
+                    view_count=0,
+                    fetched_at=datetime.now(),
+                    image_source=image_source,
+                )
+
+                if self.save_to_firebase(article):
+                    processed += 1
+
+            except Exception as e:
+                errors += 1
+                print(f"  ✗ Error processing Reddit item: {e}")
+                continue
+
+        print(
+            f"  [reddit_discovery] items={len(reddit_articles)} "
+            f"saved={processed} duplicates={duplicates} errors={errors}"
+        )
+        return processed, len(reddit_articles)
 
     def discover_exa_articles(self) -> Tuple[int, int]:
         """Discover fresh music news via Exa search and process them.
@@ -2425,7 +2504,6 @@ Headline:"""
                     artist_names=artists,
                     primary_genre=primary_genre,
                 )
-                epk_url, epk_status = self.resolve_epk(artists)
 
                 source_label = self._outlet_name_from_url(item["link"])
 
@@ -2448,8 +2526,6 @@ Headline:"""
                     view_count=0,
                     fetched_at=datetime.now(),
                     image_source=image_source,
-                    epk_url=epk_url,
-                    epk_status=epk_status,
                 )
 
                 if self.save_to_firebase(article):
@@ -2532,7 +2608,6 @@ Headline:"""
                     artist_names=artists,
                     primary_genre=primary_genre,
                 )
-                epk_url, epk_status = self.resolve_epk(artists)
 
                 article = Article(
                     id=re.sub(r"[^a-zA-Z0-9]", "-", cta_title.lower())[:50],
@@ -2553,8 +2628,6 @@ Headline:"""
                     view_count=0,
                     fetched_at=datetime.now(),
                     image_source=image_source,
-                    epk_url=epk_url,
-                    epk_status=epk_status,
                 )
 
                 if self.save_to_firebase(article):
@@ -2691,10 +2764,14 @@ Headline:"""
             print("⚠️  Warning: Perplexity SDK not available. Using fallback headlines.")
             print()
 
-        if not _exa_client:
+        if not BRAVE_API_KEY:
             print(
-                "⚠️  Warning: Exa SDK not available. Will use Perplexity for discovery."
+                "⚠️  Warning: BRAVE_API_KEY not set. Brave discovery disabled (Exa removed — credits exhausted)."
             )
+            print()
+
+        if not _ddgs_client:
+            print("⚠️  Warning: DDGS not available. DDGS discovery disabled.")
             print()
 
         if librarium_discovery.is_available():
@@ -2728,19 +2805,49 @@ Headline:"""
                 )
                 continue
 
-        # 2. Exa news discovery
+        # 2. Brave Search discovery (primary — replaces Exa)
         try:
-            exa_processed, exa_items = self.discover_exa_articles()
-            total_processed += exa_processed
-            total_fetched_items += exa_items
-            source_stats["exa_discovery"] = {
-                "saved": exa_processed,
-                "items_found": exa_items,
+            brave_processed, brave_items = self._discover_brave()
+            total_processed += brave_processed
+            total_fetched_items += brave_items
+            source_stats["brave_discovery"] = {
+                "saved": brave_processed,
+                "items_found": brave_items,
             }
         except Exception as e:
-            print(f"  ✗ Error with Exa discovery: {e}")
+            print(f"  ✗ Error with Brave discovery: {e}")
             self._log_event(
-                "source_failed", level="error", source="exa_discovery", error=str(e)
+                "source_failed", level="error", source="brave_discovery", error=str(e)
+            )
+
+        # 2b. Perplexity fallback discovery
+        try:
+            perp_processed, perp_items = self._discover_perplexity_fallback()
+            total_processed += perp_processed
+            total_fetched_items += perp_items
+            source_stats["perplexity_discovery"] = {
+                "saved": perp_processed,
+                "items_found": perp_items,
+            }
+        except Exception as e:
+            print(f"  ✗ Error with Perplexity discovery: {e}")
+            self._log_event(
+                "source_failed", level="error", source="perplexity_discovery", error=str(e)
+            )
+
+        # 2c. Reddit discovery (Phase C5)
+        try:
+            reddit_processed, reddit_items = self._discover_reddit()
+            total_processed += reddit_processed
+            total_fetched_items += reddit_items
+            source_stats["reddit_discovery"] = {
+                "saved": reddit_processed,
+                "items_found": reddit_items,
+            }
+        except Exception as e:
+            print(f"  ✗ Error with Reddit discovery: {e}")
+            self._log_event(
+                "source_failed", level="error", source="reddit_discovery", error=str(e)
             )
 
         # 3. Librarium supplementary discovery

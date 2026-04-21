@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
-"""One-shot backfill: generate Gemini images for docs with image_source=none.
+"""One-shot backfill: generate NVIDIA SD3 images for docs with image_source=none.
 
-Generates images via Gemini 2.5 Flash, compresses to WebP, uploads to
-Firebase Storage, then patches Firestore with the permanent URL.
+Generates images via NVIDIA Stable Diffusion 3 Medium, compresses to WebP,
+uploads to Firebase Storage, then patches Firestore with the permanent URL.
+
+Previously used Gemini 2.5 Flash Image — retired 2026-04-20 when the leaked
+GEMINI_API_KEY was rotated out of the stack.
 """
 
 import base64
@@ -24,8 +27,11 @@ except ImportError:
     pass
 
 FIREBASE_API_KEY = os.environ["FIREBASE_API_KEY"]
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-GEMINI_IMAGE_MODEL = os.getenv("GEMINI_IMAGE_MODEL", "gemini-2.5-flash-image")
+NVIDIA_API_KEY = os.environ["NVIDIA_API_KEY"]
+NVIDIA_IMAGE_URL = os.getenv(
+    "NVIDIA_IMAGE_URL",
+    "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3-medium",
+)
 FIREBASE_STORAGE_BUCKET = os.getenv(
     "FIREBASE_STORAGE_BUCKET", "miny-ven.firebasestorage.app"
 )
@@ -68,11 +74,7 @@ else:
 
 
 def generate_image(title: str, artist: str, genre: str) -> bytes | None:
-    """Generate image via Gemini and return raw image bytes."""
-    api_url = (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_IMAGE_MODEL}:generateContent"
-    )
+    """Generate image via NVIDIA SD3 and return raw image bytes."""
     prompt_attempts = [
         (
             "Create a photorealistic editorial hero image for a music news card. "
@@ -94,45 +96,38 @@ def generate_image(title: str, artist: str, genre: str) -> bytes | None:
     ]
 
     for attempt, prompt in enumerate(prompt_attempts, start=1):
-        payload = json.dumps(
-            {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {
-                    "responseModalities": ["TEXT", "IMAGE"],
-                },
-            }
-        ).encode()
-
-        req = urllib.request.Request(
-            api_url,
-            data=payload,
-            headers={
-                "x-goog-api-key": GEMINI_API_KEY,
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-
         try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                data = json.loads(resp.read())
+            resp = req_lib.post(
+                NVIDIA_IMAGE_URL,
+                headers={
+                    "Authorization": f"Bearer {NVIDIA_API_KEY}",
+                    "Content-Type": "application/json",
+                    "Accept": "application/json",
+                },
+                json={"prompt": prompt},
+                timeout=60,
+            )
+            if resp.status_code != 200:
+                print(
+                    f"  FAILED: NVIDIA API error (attempt {attempt}): "
+                    f"{resp.status_code} — {resp.text[:160]}"
+                )
+                time.sleep(1.2)
+                continue
 
-            parts = data.get("candidates", [{}])[0].get("content", {}).get("parts", [])
-            for part in parts:
-                inline = part.get("inlineData") or part.get("inline_data")
-                if inline and inline.get("data"):
-                    image_bytes = base64.b64decode(inline["data"])
-                    print(f"  ✓ Gemini generated image ({len(image_bytes) // 1024}KB)")
-                    return image_bytes
+            data = resp.json()
+            image_b64 = data.get("image")
+            if image_b64:
+                image_bytes = base64.b64decode(image_b64)
+                print(f"  ✓ NVIDIA generated image ({len(image_bytes) // 1024}KB)")
+                return image_bytes
 
             print(
-                f"  FAILED: Gemini response contained no image data (attempt {attempt})"
+                f"  FAILED: NVIDIA response had no image data (attempt {attempt})"
             )
             time.sleep(1.2)
         except Exception as e:
-            print(f"  FAILED: Gemini error (attempt {attempt}): {e}")
-            if "API key" in str(e) or "expired" in str(e):
-                return None
+            print(f"  FAILED: NVIDIA error (attempt {attempt}): {e}")
             time.sleep(1.2)
 
     return None
@@ -195,7 +190,7 @@ def patch_firestore(doc_id: str, image_url: str) -> bool:
         {
             "fields": {
                 "image_url": {"stringValue": image_url},
-                "image_source": {"stringValue": "ai_generated_gemini"},
+                "image_source": {"stringValue": "ai_generated_nvidia"},
             }
         }
     ).encode()
@@ -256,7 +251,7 @@ def find_articles_without_images() -> list[dict]:
 
 
 def main():
-    print(f"🎨 miny-ven Image Backfill (Gemini {GEMINI_IMAGE_MODEL})")
+    print("🎨 miny-ven Image Backfill (NVIDIA Stable Diffusion 3 Medium)")
     print("=" * 50)
 
     docs = find_articles_without_images()
