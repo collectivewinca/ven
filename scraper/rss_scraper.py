@@ -90,7 +90,7 @@ NVIDIA_CHAT_URL = os.getenv(
 )
 NVIDIA_IMAGE_URL = os.getenv(
     "NVIDIA_IMAGE_URL",
-    "https://ai.api.nvidia.com/v1/genai/stabilityai/stable-diffusion-3-medium",
+    "https://ai.api.nvidia.com/v1/genai/black-forest-labs/flux.1-schnell",
 )
 if NVIDIA_API_KEY:
     print(f"✓ NVIDIA enabled (chat model: {NVIDIA_CHAT_MODEL})")
