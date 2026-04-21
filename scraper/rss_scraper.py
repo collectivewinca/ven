@@ -667,12 +667,16 @@ class RSSScraper:
                     "Authorization": f"Bearer {NVIDIA_API_KEY}",
                     "Content-Type": "application/json",
                 },
-                json={"prompt": prompt},
-                timeout=60,
+                json={"prompt": prompt, "width": 1024, "height": 1024, "steps": 4, "seed": 0},
+                timeout=120,
             )
             r.raise_for_status()
             data = r.json()
-            image_bytes = self._decode_nvidia_image_payload(data.get("image", ""))
+            # FLUX returns {"artifacts":[{"base64":...}]}, SD3 returned {"image":...}
+            image_b64 = data.get("image") or (
+                data.get("artifacts", [{}])[0].get("base64", "") if data.get("artifacts") else ""
+            )
+            image_bytes = self._decode_nvidia_image_payload(image_b64)
             if not image_bytes:
                 return None
             print(f"  ✓ NVIDIA generated image ({len(image_bytes) // 1024}KB)")

@@ -104,8 +104,8 @@ def generate_image(title: str, artist: str, genre: str) -> bytes | None:
                     "Content-Type": "application/json",
                     "Accept": "application/json",
                 },
-                json={"prompt": prompt},
-                timeout=60,
+                json={"prompt": prompt, "width": 1024, "height": 1024, "steps": 4, "seed": 0},
+                timeout=120,
             )
             if resp.status_code != 200:
                 print(
@@ -116,7 +116,10 @@ def generate_image(title: str, artist: str, genre: str) -> bytes | None:
                 continue
 
             data = resp.json()
-            image_b64 = data.get("image")
+            # FLUX returns artifacts[0].base64, SD3 returned .image
+            image_b64 = data.get("image") or (
+                data.get("artifacts", [{}])[0].get("base64", "") if data.get("artifacts") else ""
+            )
             if image_b64:
                 image_bytes = base64.b64decode(image_b64)
                 print(f"  ✓ NVIDIA generated image ({len(image_bytes) // 1024}KB)")

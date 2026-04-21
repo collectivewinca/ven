@@ -73,6 +73,7 @@ New CTA Headline:"""
     text = chat(
         prompt=prompt,
         system="You are a viral headline writer for a music news app. Return ONLY the headline, no quotes, no markdown.",
+        model="qwen3-coder:480b",
         max_tokens=512,
         temperature=0.8,
     )
