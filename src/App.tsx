@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
-import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause, Sun, Moon, Disc } from 'lucide-react';
-import { LazyArticleImage } from './components/LazyArticleImage';
+import { Bookmark, Music, X, ExternalLink, RefreshCw, Menu, Sun, Moon } from 'lucide-react';
 import { ArticleSkeleton } from './components/ArticleSkeleton';
 import { ArticleCard } from './components/ArticleCard';
 import { ArticleGridItem } from './components/ArticleGridItem';
 import { Toast } from './components/Toast';
 import { PullToRefresh } from './components/PullToRefresh';
-import { useArtistEpk } from './hooks/useArtistEpk';
 import { isCleanHeadline } from './hooks/useArticleHelpers';
 
 function App() {
@@ -22,14 +20,10 @@ function App() {
   const [showBookmarks, setShowBookmarks] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [isPulling, setIsPulling] = useState(false);
-  const [audioLoading, setAudioLoading] = useState(false);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
-  const { ready: epkReady, getEpkUrl, findEpkInText } = useArtistEpk();
+  const [audioLoading, setAudioLoading] = useState(false);
   const [audioArticleId, setAudioArticleId] = useState<string | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [displayedSidebarCount, setDisplayedSidebarCount] = useState(20);
@@ -68,7 +62,6 @@ function App() {
     setTheme(prev => prev === 'dark' ? 'light' : 'dark');
   }, []);
 
-  const contentRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
@@ -336,15 +329,6 @@ function App() {
     });
   }, [currentArticle]);
 
-  const handleSwipe = useCallback((direction: 'up' | 'down') => {
-    if (direction === 'up' && currentIndex < filteredArticles.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-      trackEvent('swipe_up', currentArticle.id);
-    } else if (direction === 'down' && currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1);
-    }
-  }, [currentIndex, filteredArticles.length, currentArticle, trackEvent]);
-
   const handleDesktopNavigate = useCallback((direction: 'next' | 'prev') => {
     if (!filteredArticles.length) return;
 
@@ -450,69 +434,35 @@ function App() {
     }
   }, [audioArticleId, currentArticle, isAudioPlaying, playNewsSting, startNewsBed, stopAudio, trackEvent]);
 
-  // ---------- Touch handlers ----------
+  // ---------- Pull-to-refresh (swipe nav handled by ArticleCard) ----------
+  const [touchStart, setTouchStart] = useState<number | null>(null);
 
   const onTouchStart = useCallback((e: React.TouchEvent) => {
     const touchY = e.targetTouches[0].clientY;
-    setTouchEnd(null);
     setTouchStart(touchY);
-    setIsDragging(true);
-
     if (containerRef.current && containerRef.current.scrollTop === 0) {
       setIsPulling(true);
     }
   }, []);
 
   const onTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!touchStart) return;
     const touchY = e.targetTouches[0].clientY;
-    setTouchEnd(touchY);
-
-    if (isPulling && touchStart && containerRef.current?.scrollTop === 0) {
-      const pullDist = touchStart - touchY;
-      if (pullDist < 0) {
-        setPullDistance(Math.abs(pullDist));
-      }
+    const pullDist = touchStart - touchY;
+    if (pullDist < 0 && containerRef.current?.scrollTop === 0) {
+      setPullDistance(Math.abs(pullDist));
     }
-
-    if (!isPulling && touchStart && contentRef.current) {
-      const diff = touchStart - touchY;
-      const translateY = diff * 0.2;
-      contentRef.current.style.transform = `translateY(${-translateY}px)`;
-    }
-  }, [touchStart, isPulling]);
+  }, [touchStart]);
 
   const onTouchEnd = useCallback(() => {
-    setIsDragging(false);
     setIsPulling(false);
-
     if (pullDistance > 80) {
       fetchArticles(selectedGenre);
       setToast('Refreshing content...');
     }
     setPullDistance(0);
-
-    if (!touchStart || !touchEnd) {
-      if (contentRef.current) contentRef.current.style.transform = '';
-      return;
-    }
-
-    const distance = touchStart - touchEnd;
-    const minSwipeDistance = 50;
-
-    if (contentRef.current) {
-      contentRef.current.style.transform = '';
-      contentRef.current.style.transition = 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
-      setTimeout(() => {
-        if (contentRef.current) contentRef.current.style.transition = '';
-      }, 300);
-    }
-
-    if (distance > minSwipeDistance) {
-      handleSwipe('up');
-    } else if (distance < -minSwipeDistance) {
-      handleSwipe('down');
-    }
-  }, [touchStart, touchEnd, pullDistance, handleSwipe, fetchArticles, selectedGenre]);
+    setTouchStart(null);
+  }, [pullDistance, fetchArticles, selectedGenre]);
 
   // ---------- Keyboard & effects ----------
 
@@ -574,52 +524,6 @@ function App() {
   const genreGradient = (genre: string) =>
     genres.find(g => g.id === genre)?.gradient || 'from-gray-600 to-gray-500';
 
-  const locationFlag = (location: string): string => {
-    const flags: Record<string, string> = {
-      scandinavia: '🇸🇪',
-      amsterdam: '🇳🇱',
-      morocco: '🇲🇦',
-      nyc: '🇺🇸',
-      mexico: '🇲🇽',
-      medellin: '🇨🇴',
-      brazil: '🇧🇷',
-      miami: '🇺🇸',
-      caribbean: '🇩🇴',
-      tokyo: '🇯🇵',
-      bali: '🇮🇩',
-      // Fallback mappings
-      'new york': '🇺🇸',
-      'new york city': '🇺🇸',
-      'los angeles': '🇺🇸',
-      'london': '🇬🇧',
-      'uk': '🇬🇧',
-      'england': '🇬🇧',
-      'nashville': '🇺🇸',
-      'atlanta': '🇺🇸',
-      'chicago': '🇺🇸',
-      'toronto': '🇨🇦',
-      'canada': '🇨🇦',
-      'australia': '🇦🇺',
-      'sydney': '🇦🇺',
-      'germany': '🇩🇪',
-      'berlin': '🇩🇪',
-      'france': '🇫🇷',
-      'paris': '🇫🇷',
-      'nigeria': '🇳🇬',
-      'south africa': '🇿🇦',
-      'jamaica': '🇯🇲',
-      'cuba': '🇨🇺',
-      'korea': '🇰🇷',
-      'seoul': '🇰🇷',
-      'china': '🇨🇳',
-      'india': '🇮🇳',
-      'mumbai': '🇮🇳',
-      'dubai': '🇦🇪',
-      'uae': '🇦🇪',
-    };
-    return flags[location?.toLowerCase()] || '';
-  };
-
   // Carousel dots: show max 7 with ellipsis
   const renderDots = () => {
     const total = filteredArticles.length;
@@ -662,9 +566,8 @@ function App() {
     );
   };
 
-  // ---------- Action buttons (shared) ----------
+  // ---------- Render ----------
 
-  // Fully fluid sizing — scales continuously with viewport, no breakpoint jumps
   const fluidBtn: React.CSSProperties = {
     padding: 'clamp(0.5rem, 0.35rem + 0.5vw, 0.75rem)',
     minWidth: 'clamp(36px, 32px + 1vw, 48px)',
@@ -674,84 +577,6 @@ function App() {
     width: 'clamp(16px, 14px + 0.5vw, 22px)',
     height: 'clamp(16px, 14px + 0.5vw, 22px)',
   };
-  const fluidGap: React.CSSProperties = {
-    gap: 'clamp(0.375rem, 0.25rem + 0.4vw, 0.75rem)',
-  };
-
-  const renderActions = () => {
-    if (!currentArticle) return null;
-    return (
-          <div className="flex items-center" style={fluidGap}>
-        <button
-          onClick={() => toggleBookmark(currentArticle.id)}
-          className={`rounded-xl transition-all duration-200 btn-press flex items-center justify-center ${
-            bookmarks.includes(currentArticle.id) ? 'bg-amber-500/20' : ''
-          }`}
-          style={{
-            ...fluidBtn,
-            background: bookmarks.includes(currentArticle.id) ? 'rgba(245, 158, 11, 0.15)' : 'var(--action-bg)',
-            color: bookmarks.includes(currentArticle.id) ? '#f59e0b' : 'var(--action-text)'
-          }}
-          aria-label={bookmarks.includes(currentArticle.id) ? 'Remove bookmark' : 'Add bookmark'}
-        >
-          <Bookmark style={fluidIcon} className={bookmarks.includes(currentArticle.id) ? 'fill-amber-400' : ''} />
-        </button>
-
-        <button
-          onClick={handleShare}
-          className="rounded-xl transition-all duration-200 btn-press flex items-center justify-center"
-          style={{ ...fluidBtn, background: 'var(--action-bg)', color: 'var(--action-text)' }}
-          aria-label="Share article"
-        >
-          <Share2 style={fluidIcon} />
-        </button>
-
-        {currentArticle.epkStatus === 'ready' && currentArticle.epkUrl && (
-          <a
-            href={currentArticle.epkUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-xl transition-all duration-200 flex items-center justify-center"
-            style={{ ...fluidBtn, background: 'rgba(6, 182, 212, 0.12)', color: '#06b6d4' }}
-            onClick={() => trackEvent('epk_click', currentArticle.id)}
-            aria-label="View artist EPK on RapidConnect"
-          >
-            <Disc style={fluidIcon} />
-          </a>
-        )}
-
-        <button
-          onClick={handleListen}
-          disabled={audioLoading}
-          className="rounded-xl transition-all duration-200 btn-press flex items-center justify-center disabled:opacity-50"
-          style={{ ...fluidBtn, background: 'var(--action-bg)', color: 'var(--action-text)' }}
-          aria-label="Listen to article"
-        >
-          {audioLoading ? (
-            <RefreshCw style={fluidIcon} className="animate-spin" />
-          ) : isAudioPlaying && audioArticleId === currentArticle.id ? (
-            <Pause style={fluidIcon} />
-          ) : (
-            <Volume2 style={fluidIcon} />
-          )}
-        </button>
-
-        <a
-          href={currentArticle.sourceUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="rounded-xl transition-all duration-200 flex items-center justify-center"
-          style={{ ...fluidBtn, background: 'var(--action-bg)', color: 'var(--action-text)' }}
-          onClick={() => trackEvent('external_link', currentArticle.id)}
-          aria-label="Open source article"
-        >
-          <ExternalLink style={fluidIcon} />
-        </a>
-      </div>
-    );
-  };
-
-  // ---------- Render ----------
 
   if (!currentArticle && !loading) {
     return (
@@ -916,8 +741,13 @@ function App() {
           </div>
         ) : (
           <>
-            {/* Mobile: ArticleCard with internal swipe */}
-            <div className="h-full md:hidden flex flex-col overflow-hidden relative">
+            {/* Mobile: ArticleCard with internal swipe + pull-to-refresh */}
+            <div
+              className="h-full md:hidden flex flex-col overflow-hidden relative"
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
+            >
               <div className="flex-1 overflow-hidden">
                 <ArticleCard
                   article={currentArticle}

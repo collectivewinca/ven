@@ -1,0 +1,10 @@
+{
+  "publishes": {
+    "ivory-quartz-wwde": {
+      "siteUrl": "https://ivory-quartz-wwde.here.now/"
+    },
+    "arctic-comet-8k37": {
+      "siteUrl": "https://arctic-comet-8k37.here.now/"
+    }
+  }
+}
