@@ -3,9 +3,12 @@ import type { MusicNewsArticle, Genre } from './types/news';
 import { Bookmark, Share2, Music, X, ExternalLink, RefreshCw, Menu, Volume2, Pause, Sun, Moon, Disc } from 'lucide-react';
 import { LazyArticleImage } from './components/LazyArticleImage';
 import { ArticleSkeleton } from './components/ArticleSkeleton';
+import { ArticleCard } from './components/ArticleCard';
+import { ArticleGridItem } from './components/ArticleGridItem';
 import { Toast } from './components/Toast';
 import { PullToRefresh } from './components/PullToRefresh';
 import { useArtistEpk } from './hooks/useArtistEpk';
+import { isCleanHeadline } from './hooks/useArticleHelpers';
 
 function App() {
   const [articles, setArticles] = useState<MusicNewsArticle[]>([]);
@@ -28,6 +31,8 @@ function App() {
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const { ready: epkReady, getEpkUrl, findEpkInText } = useArtistEpk();
   const [audioArticleId, setAudioArticleId] = useState<string | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [displayedSidebarCount, setDisplayedSidebarCount] = useState(20);
 
   // ---------- Theme ----------
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
@@ -197,9 +202,11 @@ function App() {
     { id: 'tech', label: 'Tech', gradient: 'from-emerald-600 to-teal-600' },
   ];
 
+  // Filter to clean headlines only
+  const cleanArticles = articles.filter(a => isCleanHeadline(a.title));
   const filteredArticles = selectedGenre === 'all'
-    ? articles
-    : articles.filter(a => a.primaryGenre === selectedGenre);
+    ? cleanArticles
+    : cleanArticles.filter(a => a.primaryGenre === selectedGenre);
 
   const currentArticle = filteredArticles[currentIndex];
 
@@ -548,6 +555,7 @@ function App() {
 
   useEffect(() => {
     setCurrentIndex(0);
+    setDisplayedSidebarCount(20);
   }, [selectedGenre]);
 
   useEffect(() => {
@@ -907,87 +915,22 @@ function App() {
             </div>
           </div>
         ) : (
-          /* ─── Mobile layout ─── */
           <>
-            <div
-              ref={containerRef}
-              className="h-full md:hidden flex flex-col overflow-hidden relative"
-              onTouchStart={onTouchStart}
-              onTouchMove={onTouchMove}
-              onTouchEnd={onTouchEnd}
-            >
-              <div
-                ref={contentRef}
-                key={currentArticle?.id}
-                className={`flex-1 flex flex-col overflow-y-auto overflow-x-hidden scrollbar-hide animate-crossfade ${isDragging ? 'cursor-grabbing' : ''}`}
-              >
-                {/* Hero image — full bleed, adapts to screen */}
-                <div className="relative h-[36vh] shrink-0 overflow-hidden">
-                  <LazyArticleImage
-                    articleId={currentArticle.id}
-                    imageSource={currentArticle.imageSource}
-                    primaryGenre={currentArticle.primaryGenre}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, var(--gradient-overlay-top), transparent, var(--gradient-overlay-bottom-solid))` }} />
-                  <div className="absolute bottom-0 left-0 right-0 px-5 pb-4">
-                    <h2
-                      onClick={() => toggleBookmark(currentArticle.id)}
-                      className="font-display font-extrabold tracking-[-0.02em] leading-[1.12] text-white cursor-pointer select-none drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)]"
-                      style={{ fontSize: 'clamp(1.25rem, 1rem + 2vw, 1.75rem)' }}
-                    >
-                      {currentArticle.title}
-                      {bookmarks.includes(currentArticle.id) && (
-                        <Bookmark className="inline-block w-5 h-5 ml-2 text-amber-400 fill-amber-400 align-text-top" />
-                      )}
-                    </h2>
-                  </div>
-                </div>
-
-                {/* Below the fold */}
-                <div className="px-5 pt-3 pb-2 flex flex-col gap-2">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={`px-2.5 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(currentArticle.primaryGenre)} text-white`}>
-                      {currentArticle.primaryGenre}
-                    </span>
-                    {currentArticle.location && locationFlag(currentArticle.location) && (
-                      <span className="text-[12px]" style={{ color: 'var(--text-muted)' }}>
-                        {locationFlag(currentArticle.location)}
-                      </span>
-                    )}
-                    <span className="text-[10px] uppercase tracking-[0.14em] font-medium" style={{ color: 'var(--text-muted)' }}>
-                      {currentArticle.source}
-                    </span>
-                    <span className="w-[3px] h-[3px] rounded-full" style={{ background: 'var(--text-faint)' }} />
-                    <span className="text-[10px] uppercase tracking-[0.14em] font-medium" style={{ color: 'var(--text-muted)' }}>
-                      {new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
-                  </div>
-
-                  <p className="font-light leading-[1.6] tracking-[0.01em]" style={{ fontSize: 'clamp(0.8rem, 0.75rem + 0.5vw, 0.9rem)', color: 'var(--text-secondary)' }}>
-                    {currentArticle.summary}
-                  </p>
-
-                  {(() => {
-                    const epkUrl = epkReady ? (getEpkUrl(currentArticle.artistNames) || findEpkInText(currentArticle.title + ' ' + currentArticle.summary)) : null;
-                    return epkUrl ? (
-                      <a
-                        href={epkUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 self-start px-3 py-1.5 rounded-full text-[11px] font-bold uppercase tracking-[0.1em]"
-                        style={{ background: 'var(--accent, #6366f1)', color: '#fff', textDecoration: 'none' }}
-                      >
-                        Discover Artist <ExternalLink size={10} />
-                      </a>
-                    ) : null;
-                  })()}
-                </div>
-              </div>
-
-              {/* Actions — pinned at bottom, always visible */}
-              <div className="shrink-0" style={{ padding: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.75rem) clamp(1rem, 0.75rem + 0.5vw, 1.5rem)', borderTop: '1px solid var(--border-subtle)', background: 'var(--bg-primary)' }}>
-                {renderActions()}
+            {/* Mobile: ArticleCard with internal swipe */}
+            <div className="h-full md:hidden flex flex-col overflow-hidden relative">
+              <div className="flex-1 overflow-hidden">
+                <ArticleCard
+                  article={currentArticle}
+                  onNext={() => handleDesktopNavigate('next')}
+                  onPrev={() => handleDesktopNavigate('prev')}
+                  bookmarks={bookmarks}
+                  toggleBookmark={toggleBookmark}
+                  handleShare={handleShare}
+                  handleListen={handleListen}
+                  isAudioPlaying={isAudioPlaying}
+                  audioLoading={audioLoading}
+                  audioArticleId={audioArticleId}
+                />
               </div>
             </div>
 
@@ -996,138 +939,78 @@ function App() {
               {renderDots()}
             </div>
 
-            {/* ─── Desktop layout ─── */}
+            {/* Desktop layout */}
             <div className="hidden md:flex h-full mx-auto flex-col lg:flex-row" style={{ maxWidth: 'clamp(700px, 60vw + 200px, 1600px)', padding: 'clamp(1rem, 0.75rem + 0.75vw, 1.5rem) clamp(1.25rem, 1rem + 1vw, 2rem)', gap: 'clamp(1.25rem, 1rem + 0.75vw, 2rem)' }}>
-              {/* Left: featured article (full width on md, 2/3 on lg+) */}
+              {/* Left: featured article */}
               <div className="lg:flex-[2] min-w-0 overflow-y-auto scrollbar-hide shrink-0 lg:shrink">
-                <article
-                  key={currentArticle?.id}
-                  className="rounded-2xl overflow-hidden animate-crossfade"
-                  style={{ background: 'var(--card-bg)', boxShadow: 'var(--shadow-featured)' }}
-                >
-                  <div className="relative aspect-[16/9] overflow-hidden">
-                    <LazyArticleImage
-                      articleId={currentArticle.id}
-                      imageSource={currentArticle.imageSource}
-                      primaryGenre={currentArticle.primaryGenre}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, var(--gradient-overlay-top), transparent, var(--gradient-overlay-bottom))` }} />
-                    <div className="absolute bottom-0 left-0 right-0" style={{ padding: 'clamp(1.25rem, 1rem + 1vw, 2rem)' }}>
-                      <div className="flex items-center gap-2.5" style={{ marginBottom: 'clamp(0.625rem, 0.5rem + 0.3vw, 1rem)' }}>
-                        <span className={`px-3 py-[3px] rounded-full text-[10px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(currentArticle.primaryGenre)} text-white`}>
-                          {currentArticle.primaryGenre}
-                        </span>
-                        {currentArticle.location && locationFlag(currentArticle.location) && (
-                          <span className="text-[14px]" style={{ color: 'var(--text-secondary)' }}>
-                            {locationFlag(currentArticle.location)}
-                          </span>
-                        )}
-                        <span className="px-3 py-[3px] rounded-full text-[10px] tracking-[0.08em] backdrop-blur-md uppercase font-medium" style={{ color: 'var(--text-secondary)', background: 'var(--action-bg)' }}>
-                          {currentArticle.source}
-                        </span>
-                      </div>
-                      <h2
-                        onClick={() => toggleBookmark(currentArticle.id)}
-                        className="font-display font-extrabold tracking-[-0.025em] leading-[1.08] text-white cursor-pointer select-none hover:text-white/90 transition-colors drop-shadow-[0_2px_16px_rgba(0,0,0,0.4)]"
-                        style={{ fontSize: 'clamp(1.5rem, 1.2rem + 1.5vw, 2.5rem)' }}
-                      >
-                        {currentArticle.title}
-                        {bookmarks.includes(currentArticle.id) && (
-                          <Bookmark className="inline-block w-7 h-7 ml-2 text-amber-400 fill-amber-400 align-text-top" />
-                        )}
-                      </h2>
-                    </div>
-                  </div>
-
-                  <div style={{ padding: 'clamp(1.25rem, 1rem + 1vw, 2rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.875rem, 0.75rem + 0.4vw, 1.25rem)' }}>
-                    {/* Summary — always fully visible */}
-                    <p className="font-light leading-[1.75] tracking-[0.01em] max-w-[64ch]" style={{ fontSize: 'clamp(0.9rem, 0.85rem + 0.25vw, 1.05rem)', color: 'var(--text-secondary)' }}>
-                      {currentArticle.summary}
-                    </p>
-
-                    <div className="flex items-center justify-between pt-3" style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                      <span className="text-[10px] uppercase tracking-[0.16em] font-medium" style={{ color: 'var(--text-muted)' }}>
-                        {new Date(currentArticle.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        {(() => {
-                          const epkUrl = epkReady ? (getEpkUrl(currentArticle.artistNames) || findEpkInText(currentArticle.title + ' ' + currentArticle.summary)) : null;
-                          return epkUrl ? (
-                            <>
-                              <span className="mx-2.5" style={{ color: 'var(--text-faint)' }}>·</span>
-                              <a
-                                href={epkUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 font-bold"
-                                style={{ color: 'var(--accent, #6366f1)', textDecoration: 'none', letterSpacing: '0.08em' }}
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                Discover Artist <ExternalLink size={9} />
-                              </a>
-                            </>
-                          ) : null;
-                        })()}
-                      </span>
-                      {renderActions()}
-                    </div>
-                  </div>
-                </article>
+                <ArticleCard
+                  article={currentArticle}
+                  onNext={() => handleDesktopNavigate('next')}
+                  onPrev={() => handleDesktopNavigate('prev')}
+                  bookmarks={bookmarks}
+                  toggleBookmark={toggleBookmark}
+                  handleShare={handleShare}
+                  handleListen={handleListen}
+                  isAudioPlaying={isAudioPlaying}
+                  audioLoading={audioLoading}
+                  audioArticleId={audioArticleId}
+                />
               </div>
 
-              {/* Right: sidebar list on lg+, grid below on md only */}
+              {/* Right: sidebar with ArticleGridItem */}
               <aside className="flex-1 min-w-0 flex flex-col">
                 <div className="flex items-center justify-between" style={{ marginBottom: 'clamp(0.625rem, 0.5rem + 0.3vw, 1rem)' }}>
-                  <h3 className="font-display font-bold uppercase tracking-[0.16em]" style={{ fontSize: 'clamp(10px, 9px + 0.2vw, 13px)', color: 'var(--text-quaternary)' }}>More Stories</h3>
-                  <span className="tabular-nums" style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)', color: 'var(--text-muted)' }}>{filteredArticles.length} articles</span>
+                  <button 
+                    onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                    className="flex items-center gap-2"
+                  >
+                    <h3 className="font-display font-bold uppercase tracking-[0.16em]" style={{ fontSize: 'clamp(10px, 9px + 0.2vw, 13px)', color: 'var(--text-quaternary)' }}>
+                      More Stories
+                    </h3>
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                      {sidebarCollapsed ? '▶' : '▼'}
+                    </span>
+                  </button>
+                  <span className="tabular-nums" style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)', color: 'var(--text-muted)' }}>
+                    {filteredArticles.length} articles
+                  </span>
                 </div>
-                <div className="flex-1 overflow-y-auto scrollbar-hide">
-                  <div className="grid grid-cols-2 lg:grid-cols-1" style={{ gap: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.875rem)' }}>
-                    {filteredArticles.map((article, idx) => {
-                      const active = article.id === currentArticle?.id;
-                      return (
-                        <button
-                          key={article.id}
-                          onClick={() => {
-                            setCurrentIndex(idx);
-                            trackEvent('desktop_expand', article.id);
-                          }}
-                          className="w-full group card-hover rounded-xl overflow-hidden text-left transition-all duration-250"
-                          style={active
-                            ? { background: 'var(--card-bg-active)', boxShadow: `var(--shadow-card), inset 0 0 0 1px var(--card-border-active)` }
-                            : { background: 'var(--card-bg)', boxShadow: `0 0 0 1px var(--card-border)` }
-                          }
-                        >
-                          <div className="relative aspect-[2/1] overflow-hidden">
-                            <LazyArticleImage
-                              articleId={article.id}
-                              imageSource={article.imageSource}
-                              primaryGenre={article.primaryGenre}
-                              className="w-full h-full object-cover transition-transform duration-600 group-hover:scale-105"
+                
+                {!sidebarCollapsed && (
+                  <>
+                    <div className="flex-1 overflow-y-auto scrollbar-hide">
+                      <div 
+                        className="grid grid-cols-2 lg:grid-cols-1" 
+                        style={{ gap: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.875rem)' }}
+                      >
+                        {filteredArticles
+                          .filter(a => a.id !== currentArticle?.id)
+                          .slice(0, displayedSidebarCount)
+                          .map((article) => (
+                            <ArticleGridItem
+                              key={article.id}
+                              article={article}
+                              onSelect={(id) => {
+                                const idx = filteredArticles.findIndex(a => a.id === id);
+                                if (idx !== -1) setCurrentIndex(idx);
+                              }}
+                              isActive={article.id === currentArticle?.id}
                             />
-                            <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0.05), transparent)' }} />
-                            <span className={`absolute top-2.5 left-2.5 px-2 py-[2px] rounded-full text-[9px] font-bold uppercase tracking-[0.1em] bg-gradient-to-r ${genreGradient(article.primaryGenre)} text-white`}>
-                              {article.primaryGenre}
-                            </span>
-                          </div>
-                          <div style={{ padding: 'clamp(0.625rem, 0.5rem + 0.3vw, 0.875rem) clamp(0.75rem, 0.6rem + 0.3vw, 1rem)', display: 'flex', flexDirection: 'column', gap: 'clamp(0.25rem, 0.2rem + 0.15vw, 0.5rem)' }}>
-                            <p
-                              className="font-display font-bold leading-snug line-clamp-2 tracking-[-0.01em]"
-                              style={{ fontSize: 'clamp(12px, 11px + 0.2vw, 15px)', color: 'var(--text-primary)' }}
-                            >
-                              {article.title}
-                            </p>
-                            <p
-                              className="uppercase tracking-[0.12em] font-medium"
-                              style={{ fontSize: 'clamp(9px, 8px + 0.15vw, 12px)', color: 'var(--text-quaternary)' }}
-                            >
-                              {article.source}
-                            </p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
+                          ))}
+                      </div>
+                    </div>
+                    
+                    {displayedSidebarCount < filteredArticles.filter(a => a.id !== currentArticle?.id).length && (
+                      <button
+                        onClick={() => setDisplayedSidebarCount(prev => prev + 20)}
+                        className="mt-3 px-4 py-2 rounded-full text-sm font-medium transition-all"
+                        style={{ background: 'var(--action-bg)', color: 'var(--text-secondary)' }}
+                      >
+                        Load {Math.min(20, filteredArticles.filter(a => a.id !== currentArticle?.id).length - displayedSidebarCount)} more
+                      </button>
+                    )}
+                  </>
+                )}
               </aside>
             </div>
           </>

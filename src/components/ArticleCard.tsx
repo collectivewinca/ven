@@ -123,7 +123,7 @@ export function ArticleCard({
       <div className="relative aspect-video w-full overflow-hidden rounded-t-2xl">
         <LazyArticleImage
           articleId={article.id}
-          imageSource={article.image_url}
+          imageSource={article.imageSource}
           primaryGenre={article.primaryGenre}
           className="w-full h-full object-cover"
         />
@@ -162,7 +162,7 @@ export function ArticleCard({
           {renderAudioButton()}
 
           <a
-            href={article.url || article.source_url}
+            href={article.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
             className="p-2 rounded-full hover:bg-white/20 transition-colors text-white/80 ml-auto"
