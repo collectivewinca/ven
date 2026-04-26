@@ -5,6 +5,7 @@ export const AI_PROMPT_PREFIXES = [
   /^key facts:?/i,
   /^- original:/i,
   /^\d+\. /,
+  /^- (?:artist|news|song|album|video|premiere|exclusive|breaking|watch|unveiled|revealed|must-see|inside|cont|review|interview|feature):/i,
 ];
 
 export function isCleanHeadline(title: string): boolean {
