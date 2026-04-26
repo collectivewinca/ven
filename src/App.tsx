@@ -814,7 +814,7 @@ function App() {
                         style={{ gap: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.875rem)' }}
                       >
                         {filteredArticles
-                          .filter(a => a.id !== currentArticle?.id)
+                          .filter(a => a.id !== currentArticle?.id && isCleanHeadline(a.title))
                           .slice(0, displayedSidebarCount)
                           .map((article) => (
                             <ArticleGridItem
