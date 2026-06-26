@@ -1,11 +1,22 @@
 #!/usr/bin/env python3
 """
-generate_music_cities.py — Music Cities Daily generator
+generate_music_cities.py — Music Cities Daily generator (v2)
 
-Reads articles from PocketBase (miny-database.exe.xyz), filters for music
-relevance, deduplicates by URL, caps per-source per-city, targets 5-10
-stories per city, renders static HTML matching the existing editorial
-design, and deploys to Vercel.
+Pipeline:
+  1. Query PocketBase for articles with location in last 24h
+  2. Keyword pre-filter (blocklist + allowlist)
+  3. LLM classification (glm-5.2 via Ollama Cloud) — is it music? is it about the city?
+  4. LLM event-location extraction — override source-based location if LLM disagrees
+  5. Deduplicate by canonical URL
+  6. Cap per-source per-city at 3
+  7. Supplement thin cities (<3 articles) via SearXNG discovery + LLM filtering
+  8. Group by city, cap at 10 per city
+  9. Render static HTML
+  10. Write to output file
+
+Flags:
+  --no-llm     Skip LLM classification (keyword-only filter, for debugging)
+  --no-searxng Skip SearXNG thin-city supplementation
 
 Cron: daily at 9 AM ET (13:00 UTC) on y0-minynet.exe.xyz
 """
@@ -15,7 +26,7 @@ import json
 import os
 import re
 import sys
-import hashlib
+import time
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone, timedelta
@@ -34,6 +45,9 @@ MAX_PER_CITY = 10
 MIN_PER_CITY = 3
 MAX_PER_SOURCE_PER_CITY = 3
 LOOKBACK_HOURS = 24
+LLM_MODEL = "gemma4:31b"
+LLM_MAX_TOKENS = 2000
+LLM_TIMEOUT = 60
 
 # Non-music keywords — if any appear in title/summary, the article is dropped
 NON_MUSIC_BLOCKLIST = [
@@ -97,7 +111,6 @@ class PocketBase:
             return json.loads(r.read())["token"]
 
     def query_articles(self, lookback_hours: int) -> list[dict]:
-        """Fetch articles with location set, published within lookback."""
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=lookback_hours + 12)).strftime("%Y-%m-%d %H:%M:%S")
         flt = urllib.parse.quote(f'location != "" && published_at > "{cutoff}"')
         fields = "id,title,summary,source,source_url,primary_genre,location,artist_names,published_at"
@@ -117,15 +130,110 @@ class PocketBase:
         return all_items
 
 # ---------------------------------------------------------------------------
+# LLM client (Ollama Cloud, OpenAI-compatible)
+# ---------------------------------------------------------------------------
+
+class LLMClient:
+    """Thin wrapper around Ollama Cloud's OpenAI-compatible endpoint."""
+
+    def __init__(self, api_key: str, model: str = LLM_MODEL):
+        self.url = "https://ollama.com/v1/chat/completions"
+        self.api_key = api_key
+        self.model = model
+        self.call_count = 0
+
+    def chat(self, prompt: str, max_tokens: int = LLM_MAX_TOKENS) -> str:
+        """Send a single-turn prompt, return the assistant text content."""
+        body = json.dumps({
+            "model": self.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": max_tokens,
+            "temperature": 0.1,
+        }).encode()
+
+        req = urllib.request.Request(self.url, data=body, headers={
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        })
+
+        try:
+            with urllib.request.urlopen(req, timeout=LLM_TIMEOUT) as r:
+                data = json.loads(r.read())
+            self.call_count += 1
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return content.strip() if content else ""
+        except Exception as e:
+            print(f"  [LLM] Error: {e}")
+            return ""
+
+    def classify_music_relevance(self, title: str, summary: str, city: str) -> bool:
+        """Return True if the LLM says this is a music story about the city."""
+        prompt = (
+            f"Is this article primarily about music or a music event that is happening "
+            f"in or relevant to {city}? Reply only YES or NO.\n"
+            f"Title: {title}\nSummary: {summary[:300]}"
+        )
+        resp = self.chat(prompt)
+        return resp.upper().startswith("YES")
+
+    def extract_event_location(self, title: str, summary: str, city_names: list[str]) -> str:
+        """Ask the LLM which residency city the event is happening in."""
+        cities_str = ", ".join(city_names)
+        prompt = (
+            f"Which of these cities is this music event primarily happening in? "
+            f"Reply with ONLY the city name from this list, or NONE if none apply.\n"
+            f"Cities: {cities_str}\n"
+            f"Title: {title}\nSummary: {summary[:300]}"
+        )
+        resp = self.chat(prompt)
+        # Match response against city names (case-insensitive)
+        resp_clean = resp.strip().strip(".").strip()
+        for name in city_names:
+            if name.lower() == resp_clean.lower():
+                return name
+        return ""
+
+# ---------------------------------------------------------------------------
+# SearXNG discovery (thin-press city supplementation)
+# ---------------------------------------------------------------------------
+
+class SearXNGClient:
+    """Query the self-hosted SearXNG meta-search for city-specific music news."""
+
+    def __init__(self, base_url: str, token: str):
+        self.base = base_url.rstrip("/")
+        self.token = token
+
+    def search_music(self, city_name: str, year: int) -> list[dict]:
+        """Search for recent music news about a city."""
+        query = f"{city_name} music artist album tour concert festival {year}"
+        params = urllib.parse.urlencode({
+            "q": query,
+            "format": "json",
+            "categories": "news",
+            "time_range": "week",
+            "safesearch": 0,
+        })
+        url = f"{self.base}/search?{params}"
+        req = urllib.request.Request(url, headers={
+            "Authorization": f"Bearer {self.token}",
+            "User-Agent": "miny-ven/1.0",
+        })
+
+        try:
+            with urllib.request.urlopen(req, timeout=20) as r:
+                data = json.loads(r.read())
+            return data.get("results", [])[:10]
+        except Exception as e:
+            print(f"  [SearXNG] Error searching {city_name}: {e}")
+            return []
+
+# ---------------------------------------------------------------------------
 # Filtering
 # ---------------------------------------------------------------------------
 
 def build_haystack(article: dict) -> str:
-    """Lowercased text of title + summary for keyword matching."""
-    parts = [
-        article.get("title") or "",
-        article.get("summary") or "",
-    ]
+    parts = [article.get("title") or "", article.get("summary") or ""]
     return " ".join(parts).lower()
 
 def has_non_music_content(haystack: str) -> bool:
@@ -141,24 +249,22 @@ def has_music_content(haystack: str) -> bool:
     return False
 
 def canonical_url(url: str) -> str:
-    """Strip tracking params, normalize for dedup."""
     parsed = urllib.parse.urlsplit(url)
-    # Keep only essential params, strip utm_*, fbclid, etc
     qs = urllib.parse.parse_qs(parsed.query)
-    clean = {k: v for k, v in qs.items() if not k.startswith("utm_") and k not in ("fbclid", "ref", "source")}
+    clean = {k: v for k, v in qs.items()
+             if not k.startswith("utm_") and k not in ("fbclid", "ref", "source")}
     query = urllib.parse.urlencode(clean, doseq=True)
     path = parsed.path.rstrip("/") if parsed.path != "/" else "/"
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, query, ""))
 
-def filter_articles(articles: list[dict]) -> list[dict]:
-    """Apply relevance + dedup + per-source-cap filters."""
+def keyword_filter(articles: list[dict]) -> list[dict]:
+    """Stage 1: keyword pre-filter (blocklist + allowlist + dedup + per-source cap)."""
     seen_urls = set()
     source_city_counts = defaultdict(int)
     result = []
 
     for art in articles:
         title = art.get("title") or ""
-        summary = art.get("summary") or ""
         source = art.get("source") or ""
         source_url = art.get("source_url") or ""
         location = art.get("location") or ""
@@ -168,21 +274,16 @@ def filter_articles(articles: list[dict]) -> list[dict]:
 
         haystack = build_haystack(art)
 
-        # 1. Drop non-music
         if has_non_music_content(haystack):
             continue
-
-        # 2. Require music relevance
         if not has_music_content(haystack):
             continue
 
-        # 3. Dedup by canonical URL
         canon = canonical_url(source_url)
         if canon in seen_urls:
             continue
         seen_urls.add(canon)
 
-        # 4. Per-source per-city cap
         key = (source, location)
         if source_city_counts[key] >= MAX_PER_SOURCE_PER_CITY:
             continue
@@ -192,12 +293,143 @@ def filter_articles(articles: list[dict]) -> list[dict]:
 
     return result
 
+def llm_filter(articles: list[dict], llm: LLMClient) -> list[dict]:
+    """Stage 2: LLM classification — is it music? is it about the city?"""
+    result = []
+    for i, art in enumerate(articles):
+        title = art.get("title") or ""
+        summary = art.get("summary") or ""
+        location = art.get("location") or ""
+
+        is_music = llm.classify_music_relevance(title, summary, location)
+        if is_music:
+            result.append(art)
+        else:
+            print(f"  [LLM] Dropped: [{location}] {title[:60]}")
+
+    return result
+
+def llm_relocate(articles: list[dict], llm: LLMClient, city_names: list[str]) -> list[dict]:
+    """Stage 3: LLM event-location extraction — override source-based location."""
+    result = []
+    city_names_sorted = sorted(city_names, key=len, reverse=True)
+
+    for art in articles:
+        title = art.get("title") or ""
+        summary = art.get("summary") or ""
+        current_loc = art.get("location") or ""
+
+        llm_loc = llm.extract_event_location(title, summary, city_names_sorted)
+        if llm_loc and llm_loc != current_loc:
+            print(f"  [LLM] Relocated: {current_loc} -> {llm_loc} | {title[:50]}")
+            art = dict(art)
+            art["location"] = llm_loc
+        result.append(art)
+
+    return result
+
+def filter_articles(articles: list[dict], llm: LLMClient | None = None,
+                    do_relocate: bool = False, all_city_names: list[str] | None = None) -> list[dict]:
+    """Full filter pipeline: keyword → LLM → (optional relocate) → dedup → per-source cap."""
+    # Stage 1: keyword pre-filter
+    kw_filtered = keyword_filter(articles)
+    print(f"[music-cities] After keyword filter: {len(kw_filtered)} articles")
+
+    # Stage 2: LLM classification (optional)
+    if llm:
+        print(f"[music-cities] Running LLM classification on {len(kw_filtered)} articles...")
+        llm_filtered = llm_filter(kw_filtered, llm)
+        print(f"[music-cities] After LLM filter: {len(llm_filtered)} articles (LLM calls: {llm.call_count})")
+
+        # Stage 3: LLM event-location extraction (optional, off by default — doubles LLM calls)
+        if do_relocate and all_city_names:
+            print(f"[music-cities] Running LLM location extraction on {len(llm_filtered)} articles...")
+            relocated = llm_relocate(llm_filtered, llm, all_city_names)
+        else:
+            relocated = llm_filtered
+    else:
+        relocated = kw_filtered
+
+    # Re-apply per-source cap after relocation (location may have changed)
+    seen_urls = set()
+    source_city_counts = defaultdict(int)
+    result = []
+    for art in relocated:
+        canon = canonical_url(art.get("source_url", ""))
+        if canon in seen_urls:
+            continue
+        seen_urls.add(canon)
+        source = art.get("source", "")
+        location = art.get("location", "")
+        key = (source, location)
+        if source_city_counts[key] >= MAX_PER_SOURCE_PER_CITY:
+            continue
+        source_city_counts[key] += 1
+        result.append(art)
+
+    return result
+
+# ---------------------------------------------------------------------------
+# Thin-press city supplementation
+# ---------------------------------------------------------------------------
+
+def supplement_thin_cities(grouped: dict, city_config: dict, searxng: SearXNGClient,
+                           llm: LLMClient, year: int) -> dict:
+    """For cities with < MIN_PER_CITY articles, search SearXNG and LLM-filter results."""
+    for phase_key, cities in city_config["cities_by_phase"].items():
+        for city in cities:
+            name = city["name"]
+            current_count = len(grouped.get(name, []))
+            if current_count >= MIN_PER_CITY:
+                continue
+
+            needed = MIN_PER_CITY - current_count
+            print(f"[music-cities] Supplementing {name} ({current_count} articles, need {needed} more)...")
+
+            results = searxng.search_music(name, year)
+            if not results:
+                continue
+
+            added = 0
+            seen_urls = {canonical_url(a.get("source_url", "")) for arts in grouped.values() for a in arts}
+
+            for r in results[:5]:  # Only check top 5 results to limit LLM calls
+                if added >= needed:
+                    break
+
+                title = r.get("title", "")
+                url = r.get("url", "")
+                if not title or not url:
+                    continue
+
+                canon = canonical_url(url)
+                if canon in seen_urls:
+                    continue
+
+                # LLM classify: is it music + about this city?
+                if llm.classify_music_relevance(title, "", name):
+                    seen_urls.add(canon)
+                    grouped.setdefault(name, []).append({
+                        "title": title,
+                        "source": "SearXNG Discovery",
+                        "source_url": url,
+                        "primary_genre": "",
+                        "location": name,
+                        "artist_names": [],
+                        "published_at": "",
+                    })
+                    added += 1
+                    print(f"  [SearXNG] Added: {title[:60]}")
+
+            print(f"[music-cities] {name}: supplemented {added} articles")
+
+    return grouped
+
 # ---------------------------------------------------------------------------
 # City grouping + phase ordering
 # ---------------------------------------------------------------------------
 
 def load_city_config(yaml_path: Path) -> dict:
-    """Load residency-aliases.yaml and build phase → cities mapping."""
     try:
         import yaml
     except ImportError:
@@ -210,9 +442,7 @@ def load_city_config(yaml_path: Path) -> dict:
     for phase_key, phase_info in data.get("phases", {}).items():
         if not phase_info.get("active", True):
             continue
-        phase_num = phase_key.replace("phase_", "")
         phases[phase_key] = {
-            "num": phase_num,
             "name": phase_info.get("name", ""),
             "description": phase_info.get("description", "").strip(),
         }
@@ -236,14 +466,12 @@ def load_city_config(yaml_path: Path) -> dict:
     }
 
 def group_by_city(articles: list[dict], city_config: dict) -> dict:
-    """Group articles by city, capped at MAX_PER_CITY."""
     by_city = defaultdict(list)
     for art in articles:
         loc = art.get("location", "")
         if loc in city_config["city_names"]:
             by_city[loc].append(art)
 
-    # Cap per city
     capped = {}
     for city, arts in by_city.items():
         capped[city] = arts[:MAX_PER_CITY]
@@ -254,12 +482,7 @@ def group_by_city(articles: list[dict], city_config: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def render_html(city_config: dict, grouped: dict, date_str: str, total_count: int) -> str:
-    """Render the music cities daily page as static HTML."""
-
     phase_order = ["phase_1", "phase_2", "phase_3", "phase_4"]
-    phase_labels = {
-        "phase_1": "1", "phase_2": "2", "phase_3": "3", "phase_4": "4",
-    }
 
     sections_html = []
     for phase_key in phase_order:
@@ -297,7 +520,7 @@ def render_html(city_config: dict, grouped: dict, date_str: str, total_count: in
 
         sections_html.append(
             f'<section class="phase-block">'
-            f'<p class="phase-label">phase {phase_labels.get(phase_key, "")}</p>'
+            f'<p class="phase-label">phase {phase_key.replace("phase_","")}</p>'
             f'<h2 class="phase-title">{escape(phase["name"])}</h2>'
             f'<p class="phase-desc">{escape(phase["description"])}</p>'
             f'{"".join(city_blocks)}</section>'
@@ -361,19 +584,27 @@ Updated daily 9 AM ET \u00b7 <a href="https://freeintelligence.ai/">Free Intelli
 # ---------------------------------------------------------------------------
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Music Cities Daily generator")
+    parser.add_argument("--no-llm", action="store_true", help="Skip LLM classification")
+    parser.add_argument("--no-searxng", action="store_true", help="Skip SearXNG thin-city supplementation")
+    parser.add_argument("--relocate", action="store_true", help="Enable LLM event-location extraction (slow, off by default)")
+    args = parser.parse_args()
+
     print(f"[music-cities] Starting generation at {datetime.now(timezone.utc).isoformat()}")
 
-    # Load env
     env = load_env(ENV_FILE)
     pb_url = env.get("POCKETBASE_URL", "https://miny-database.exe.xyz")
     pb_email = env.get("POCKETBASE_ADMIN_EMAIL", "")
     pb_pw = env.get("POCKETBASE_ADMIN_PASSWORD", "")
+    ollama_key = env.get("OLLAMA_API_KEY", "")
+    searxng_url = env.get("CRW_SEARXNG_URL", "")
+    searxng_token = env.get("CRW_EDGE_TOKEN", "")
 
     if not pb_email or not pb_pw:
         print("[music-cities] ERROR: Missing PocketBase credentials")
         sys.exit(1)
 
-    # Load city config
     city_config = load_city_config(YAML_PATH)
     print(f"[music-cities] Loaded {len(city_config['city_names'])} cities across {len(city_config['phases'])} phases")
 
@@ -383,18 +614,38 @@ def main():
     articles = pb.query_articles(LOOKBACK_HOURS)
     print(f"[music-cities] Found {len(articles)} articles with location in lookback window")
 
+    # Initialize LLM client (or None if --no-llm)
+    llm = None
+    if not args.no_llm and ollama_key:
+        llm = LLMClient(ollama_key)
+        print(f"[music-cities] LLM classification enabled (model: {LLM_MODEL})")
+    else:
+        print("[music-cities] LLM classification disabled")
+
     # Filter
-    filtered = filter_articles(articles)
-    print(f"[music-cities] After filtering: {len(filtered)} articles")
+    all_city_names = sorted(city_config["city_names"], key=len, reverse=True)
+    filtered = filter_articles(articles, llm, do_relocate=args.relocate, all_city_names=all_city_names)
+    print(f"[music-cities] After all filters: {len(filtered)} articles")
 
     # Group by city
     grouped = group_by_city(filtered, city_config)
+
+    # Supplement thin cities via SearXNG
+    if not args.no_searxng and searxng_url and searxng_token and llm:
+        searxng = SearXNGClient(searxng_url, searxng_token)
+        year = datetime.now(timezone.utc).year
+        print(f"[music-cities] Supplementing thin cities via SearXNG...")
+        grouped = supplement_thin_cities(grouped, city_config, searxng, llm, year)
+
     total_displayed = sum(len(arts) for arts in grouped.values())
     cities_with_content = len(grouped)
-    print(f"[music-cities] {total_displayed} articles across {cities_with_content} cities")
+    print(f"[music-cities] Final: {total_displayed} articles across {cities_with_content} cities")
+
+    if llm:
+        print(f"[music-cities] Total LLM calls: {llm.call_count}")
 
     # Date label
-    now_et = datetime.now(timezone.utc) - timedelta(hours=4)  # EDT = UTC-4
+    now_et = datetime.now(timezone.utc) - timedelta(hours=4)
     date_str = now_et.strftime("%B %-d, %Y")
 
     # Render
