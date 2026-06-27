@@ -113,7 +113,7 @@ class PocketBase:
     def query_articles(self, lookback_hours: int) -> list[dict]:
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=lookback_hours + 12)).strftime("%Y-%m-%d %H:%M:%S")
         flt = urllib.parse.quote(f'location != "" && published_at > "{cutoff}"')
-        fields = "id,title,summary,source,source_url,primary_genre,location,artist_names,published_at"
+        fields = "id,title,summary,source,source_url,primary_genre,location,artist_names,published_at,curated,curator,entity_rc_url"
 
         all_items = []
         page = 1
@@ -485,6 +485,34 @@ def render_html(city_config: dict, grouped: dict, date_str: str, total_count: in
     phase_order = ["phase_1", "phase_2", "phase_3", "phase_4"]
 
     sections_html = []
+
+    # Curated Picks section
+    curated_picks = []
+    for phase_key in phase_order:
+        if phase_key not in city_config["phases"]:
+            continue
+        for city in city_config["cities_by_phase"].get(phase_key, []):
+            for art in grouped.get(city["name"], []):
+                if art.get("curated"):
+                    curated_picks.append(art)
+    curated_section = ""
+    if curated_picks:
+        picks_items = []
+        for art in curated_picks[:5]:
+            title = escape(art.get("title", "")[:200])
+            url = escape(art.get("source_url", ""))
+            source = escape(art.get("source", ""))
+            curator = escape(art.get("curator", "VE Curator"))
+            picks_items.append(
+                f'<div class="pick"><a href="{url}" target="_blank" rel="noopener">{title}</a>'
+                f'<div class="pick-meta">★ {curator} · {source}</div></div>'
+            )
+        curated_section = (
+            '<section class="picks-block">'
+            '<p class="picks-label">Curated Picks</p>'
+            f'{"".join(picks_items)}</section>'
+        )
+
     for phase_key in phase_order:
         if phase_key not in city_config["phases"]:
             continue
@@ -505,8 +533,12 @@ def render_html(city_config: dict, grouped: dict, date_str: str, total_count: in
                 source = escape(art.get("source", ""))
                 genre = escape(art.get("primary_genre", ""))
                 genre_html = f'<span class="genre">{genre}</span>' if genre else ""
+                curated_html = ""
+                if art.get("curated"):
+                    curator = escape(art.get("curator", "VE Curator"))
+                    curated_html = f'<span class="curated-badge">★ {curator}</span>'
                 articles_html.append(
-                    f'<div class="article"><a href="{url}" target="_blank" rel="noopener">{title}</a>'
+                    f'<div class="article">{curated_html}<a href="{url}" target="_blank" rel="noopener">{title}</a>'
                     f'<div class="meta">{source}{genre_html}</div></div>'
                 )
 
@@ -564,6 +596,14 @@ h1 {{ font-weight:700; font-size:38px; line-height:1.1; margin:0 0 8px; letter-s
 footer {{ margin-top:64px; padding-top:20px; border-top:2px solid var(--ink); font-family:var(--sans); font-size:12px; color:var(--muted); }}
 footer a {{ color:var(--accent); text-decoration:none; }}
 .empty {{ font-style:italic; color:var(--muted); font-size:14px; }}
+.curated-badge {{ display:inline-block; padding:1px 8px; background:linear-gradient(to right,#f97316,#ea580c); color:#fff; border-radius:99px; font-size:10px; font-weight:600; text-transform:uppercase; letter-spacing:0.06em; margin-right:6px; font-family:var(--sans); }}
+.picks-block {{ margin:0 0 40px; padding:24px; background:var(--hint); border-radius:12px; }}
+.picks-label {{ font-family:var(--sans); font-size:11px; letter-spacing:0.18em; text-transform:uppercase; color:var(--accent); font-weight:600; margin:0 0 16px; }}
+.pick {{ padding:8px 0; border-bottom:1px solid var(--rule); }}
+.pick:last-child {{ border-bottom:none; }}
+.pick a {{ color:var(--ink); text-decoration:none; font-weight:600; }}
+.pick a:hover {{ text-decoration:underline; }}
+.pick-meta {{ font-family:var(--sans); font-size:11px; color:var(--muted); margin-top:2px; }}
 </style>
 </head>
 <body>
@@ -571,6 +611,7 @@ footer a {{ color:var(--accent); text-decoration:none; }}
 <p class="eyebrow">MINY \u00b7 y0 Residency</p>
 <h1>Music Cities Daily</h1>
 <p class="dek">{date_str} \u00b7 {total_count} stories across the residency cities</p>
+{curated_section}
 {body_sections}
 <footer>
 Updated daily 9 AM ET \u00b7 <a href="https://freeintelligence.ai/">Free Intelligence</a>
