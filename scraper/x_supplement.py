@@ -43,7 +43,7 @@ def bird_search(query: str, count: int = 5) -> list[dict]:
     """Search X via bird CLI and return parsed tweets."""
     try:
         result = subprocess.run(
-            ["bird", "search", query, "--json", "--count", str(count), "--plain"],
+            ["bird", "search", query, "--json", "--count", str(count)],
             capture_output=True, text=True, timeout=30
         )
         if result.returncode != 0:
@@ -112,13 +112,16 @@ def inject_x_articles(html: str, city: str, tweets: list[dict]) -> str:
     articles_html = ""
     for t in tweets:
         text = t.get("text", t.get("full_text", ""))
-        # Clean up tweet text
         text = re.sub(r'https?://\S+', '', text).strip()
         text = escape(text[:200])
         tweet_url = t.get("url", t.get("permalink", ""))
         if not tweet_url:
             tid = t.get("id", t.get("tweet_id", ""))
-            handle = t.get("user", {}).get("screen_name", "") if isinstance(t.get("user"), dict) else ""
+            author = t.get("author", t.get("user", {}))
+            if isinstance(author, dict):
+                handle = author.get("username", author.get("screen_name", ""))
+            else:
+                handle = str(author)
             if tid and handle:
                 tweet_url = f"https://x.com/{handle}/status/{tid}"
         if not tweet_url or not text:
@@ -131,24 +134,26 @@ def inject_x_articles(html: str, city: str, tweets: list[dict]) -> str:
     if not articles_html:
         return html
 
-    # Find the city block and append before its closing </div>
-    # Pattern: <div class="city"><h3>CityName ...>...</div>
-    city_pattern = re.compile(
-        r'(<div class="city"><h3>' + re.escape(city) + r'.*?)(</div>\s*</div>)',
+    # Find the city block: <div class="city"><h3>CityName ...</h3>...articles...</div>
+    # The city block ends at </div> before the next <div class="city"> or </section>
+    city_escaped = re.escape(city)
+    # Find the city h3 and its content up to the closing </div>
+    pattern = re.compile(
+        r'(<div class="city"><h3>' + city_escaped + r'\s*<span class="count">·\s*\d+</span></h3>)(.*?)(</div>\s*(?=<div class="city">|</section>))',
         re.DOTALL
     )
-    match = city_pattern.search(html)
+    match = pattern.search(html)
     if match:
-        # Insert articles before the city block's closing div
-        insert_point = match.start(2)
+        # Insert articles before the closing </div>
+        insert_point = match.start(3)
         html = html[:insert_point] + articles_html + html[insert_point:]
         # Update the count
-        old_count = re.search(r'·\s*\d+</span>', html[match.start():insert_point])
-        if old_count:
-            current = int(re.search(r'\d+', old_count.group()).group())
-            new_count = current + len(tweets)
+        old_count_match = re.search(r'·\s*(\d+)</span>', match.group(1))
+        if old_count_match:
+            old_count = int(old_count_match.group(1))
+            new_count = old_count + len(tweets)
             html = html[:match.start()] + html[match.start():insert_point].replace(
-                f"· {current}</span>", f"· {new_count}</span>"
+                f"· {old_count}</span>", f"· {new_count}</span>", 1
             ) + html[insert_point:]
 
     return html
