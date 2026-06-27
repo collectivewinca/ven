@@ -79,7 +79,7 @@ def pb_patch_article(token, article_id, patch_data):
 # ---------------------------------------------------------------------------
 
 def search_rc_profile(artist_name):
-    """Search SearXNG for a RapidConnect artist profile."""
+    """Search SearXNG for a RapidConnect artist profile + extract bio/genres from content."""
     if not SEARXNG_TOKEN:
         return None
 
@@ -101,7 +101,36 @@ def search_rc_profile(artist_name):
         for r in results:
             link = r.get("url", "")
             if "rapidconnect.minyvinyl.com/artists/" in link:
-                return {"profile_url": link, "title": r.get("title", "")}
+                content = r.get("content", "")
+                data = {
+                    "profile_url": link,
+                    "title": r.get("title", ""),
+                    "bio": content[:2000] if content else "",
+                }
+                # Extract genres from content (pattern: "genres of X, Y, and Z" or "known for ... in the genres of X, Y")
+                import re as _re
+                genre_match = _re.search(r'genres? of ([^.]+)', content, _re.I)
+                if genre_match:
+                    genres_raw = genre_match.group(1).strip().rstrip('.')
+                    data["genres"] = [g.strip() for g in _re.split(r'[,/]', genres_raw) if g.strip() and len(g.strip()) > 2 and g.strip() not in ("and", "the", "of")]
+                else:
+                    data["genres"] = []
+                # Extract socials from content (URLs in the content field)
+                socials = {}
+                if "spotify.com" in content:
+                    m = _re.search(r'(https?://open\.spotify\.com/[^\s"]+)', content)
+                    if m: socials["spotify"] = m.group(1)
+                if "instagram.com" in content:
+                    m = _re.search(r'(https?://(?:www\.)?instagram\.com/[^\s"]+)', content)
+                    if m: socials["instagram"] = m.group(1)
+                if "bandcamp.com" in content:
+                    m = _re.search(r'(https?://[^\s"]+\.bandcamp\.com[^\s"]*)', content)
+                    if m: socials["bandcamp"] = m.group(1)
+                if "soundcloud.com" in content:
+                    m = _re.search(r'(https?://soundcloud\.com/[^\s"]+)', content)
+                    if m: socials["soundcloud"] = m.group(1)
+                data["socials"] = socials
+                return data
     except Exception as e:
         sys.stderr.write(f"  [SearXNG] Error: {e}\n")
     return None
@@ -153,15 +182,26 @@ def main():
             continue
 
         profile_url = rc_data["profile_url"]
+        bio = rc_data.get("bio", "")
+        genres = rc_data.get("genres", [])
+        socials = rc_data.get("socials", {})
         print(f"    -> Found: {profile_url}")
+        if bio:
+            print(f"    -> Bio: {bio[:100]}...")
+        if genres:
+            print(f"    -> Genres: {genres}")
 
         if not dry_run:
             now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-            pb_patch_entity(token, eid, {
+            patch = {
                 "rc_profile_url": profile_url,
+                "rc_bio": bio[:2000],
+                "rc_genres": genres,
+                "rc_socials": socials,
                 "rc_enriched": True,
                 "rc_enriched_at": now,
-            })
+            }
+            pb_patch_entity(token, eid, patch)
 
             # Link RC URL to articles
             article_ids = entity.get("article_ids", [])
