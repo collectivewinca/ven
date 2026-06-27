@@ -60,6 +60,11 @@ NON_MUSIC_BLOCKLIST = [
     "medical emergency in japan", "survival guide",
 ]
 
+# URL patterns to block — Reddit threads, image-only posts, etc.
+URL_BLOCKLIST = [
+    "reddit.com/r/", "redd.it/", "i.redd.it",
+]
+
 # Music relevance keywords — at least one must appear somewhere
 MUSIC_KEYWORDS = [
     "music", "album", "single", "ep", "track", "song", "artist",
@@ -236,6 +241,14 @@ def build_haystack(article: dict) -> str:
     parts = [article.get("title") or "", article.get("summary") or ""]
     return " ".join(parts).lower()
 
+def is_blocked_url(url: str) -> bool:
+    """Check if URL matches any blocklist pattern."""
+    url_lower = url.lower()
+    for pattern in URL_BLOCKLIST:
+        if pattern in url_lower:
+            return True
+    return False
+
 def has_non_music_content(haystack: str) -> bool:
     for kw in NON_MUSIC_BLOCKLIST:
         if kw in haystack:
@@ -258,7 +271,8 @@ def canonical_url(url: str) -> str:
     return urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, path, query, ""))
 
 def keyword_filter(articles: list[dict]) -> list[dict]:
-    """Stage 1: keyword pre-filter (blocklist + allowlist + dedup + per-source cap)."""
+    """Stage 1: keyword pre-filter (blocklist + allowlist + dedup + per-source cap).
+    Curated articles bypass the filter entirely."""
     seen_urls = set()
     source_city_counts = defaultdict(int)
     result = []
@@ -270,6 +284,19 @@ def keyword_filter(articles: list[dict]) -> list[dict]:
         location = art.get("location") or ""
 
         if not location or not source_url:
+            continue
+
+        # Curated articles bypass all keyword filtering
+        if art.get("curated"):
+            canon = canonical_url(source_url)
+            if canon in seen_urls:
+                continue
+            seen_urls.add(canon)
+            result.append(art)
+            continue
+
+        # Block Reddit threads and image-only posts
+        if is_blocked_url(source_url):
             continue
 
         haystack = build_haystack(art)
@@ -294,12 +321,18 @@ def keyword_filter(articles: list[dict]) -> list[dict]:
     return result
 
 def llm_filter(articles: list[dict], llm: LLMClient) -> list[dict]:
-    """Stage 2: LLM classification — is it music? is it about the city?"""
+    """Stage 2: LLM classification — is it music? is it about the city?
+    Curated articles bypass the LLM filter."""
     result = []
     for i, art in enumerate(articles):
         title = art.get("title") or ""
         summary = art.get("summary") or ""
         location = art.get("location") or ""
+
+        # Curated articles bypass LLM filter
+        if art.get("curated"):
+            result.append(art)
+            continue
 
         is_music = llm.classify_music_relevance(title, summary, location)
         if is_music:
