@@ -9,6 +9,7 @@ import {
   Pause,
   RefreshCw,
   ExternalLink,
+  Music,
 } from 'lucide-react';
 
 interface ArticleCardProps {
@@ -160,6 +161,19 @@ export function ArticleCard({
           </button>
 
           {renderAudioButton()}
+
+          {article.epkUrl && (
+            <a
+              href={article.epkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-2 rounded-full hover:bg-white/20 transition-colors text-cyan-300"
+              aria-label="View artist EPK on RapidConnect"
+              title="RapidConnect EPK"
+            >
+              <Music className="w-5 h-5" />
+            </a>
+          )}
 
           <a
             href={article.sourceUrl}

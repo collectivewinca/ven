@@ -33,7 +33,8 @@
 - **Published-Only Gate** — indexes only records with `content_status='published'` (paired with Subway-Musician EPK quality contract, see PR #9)
 - **Embedded Fallback** — ships a static `artistEpkIndex.json` snapshot; falls back gracefully if the PB filter 400s (pre-field-add window)
 - **Cache** — localStorage key `miny-ven-artist-epk-index-v2` (bumped from v1 to drop stale unfiltered indexes after the published-only gate shipped)
-- **Source**: `src/hooks/useArtistEpk.ts`
+- **UI Wiring** — `useArtistEpk` is called once in `App.tsx`; resolved EPK URLs are memoized over the filtered article list and passed to `ArticleCard` (cyan Music icon button) and `ArticleGridItem` (cyan Music badge) via `article.epkUrl`
+- **Source**: `src/hooks/useArtistEpk.ts`, consumed in `src/App.tsx`, rendered in `src/components/ArticleCard.tsx` and `src/components/ArticleGridItem.tsx`
 
 ### Music Trends Monitor (music-trends/)
 - **30+ Subreddits** — Music communities across MINY y0's 13 cities
@@ -302,7 +303,10 @@ Authenticated users have full read/write/delete access.
 - **Fixed (build)**: removed dead `getField` helper in `useArtistEpk.ts` that blocked `tsc -b` (TS6133 unused value) — Vercel production deploy was failing on this since the PR #1 merge
 - **Migrated**: `useArtistEpk` reads live PocketBase `sm_musicians` at `miny-database.exe.xyz` (published-only) instead of the stale `subway-musician-564bd` Firestore April snapshot — paired with Subway-Musician PR #9 (EPK quality contract: sanitized LLM output, name guard, fail-closed generation, repair sweep)
 - **Added**: localStorage cache key bumped to `v2` so stale unfiltered indexes drop on first load after the published-only gate
-- **Deploy**: Vercel production at https://ven.minyvinyl.com (redeploy after build fix)
+- **Wired (UI)**: `useArtistEpk` is now called in `App.tsx`; EPK URLs are resolved against the PB index via `findEpkInText(title + summary)` and memoized over the filtered article list. Previously the hook existed but was never imported, so Vite tree-shook it out of the bundle and the feature was inert in production.
+- **Rendered (UI)**: `ArticleCard` shows a cyan Music icon button linking to `rapidconnect.minyvinyl.com/artists/<id>` when an article mentions a published musician; `ArticleGridItem` shows a small cyan Music badge on sidebar cards. Both reuse the existing RapidConnect cyan accent.
+- **Removed**: dead Firestore `epk_url`/`epk_status` field reads from `App.tsx` fetch path — these fields were never written by the scraper (not in the `Article` dataclass) and never existed on live documents; the type fields remain on `MusicNewsArticle` but are now populated at render time from the PB index instead of from Firestore.
+- **Deploy**: Vercel production at https://ven.minyvinyl.com
 
 ### 2026-03-05
 - **Added**: Music Trends Monitoring System (`music-trends/`)

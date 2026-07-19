@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { MusicNewsArticle, Genre } from './types/news';
 import { Bookmark, Music, X, ExternalLink, RefreshCw, Menu, Sun, Moon } from 'lucide-react';
 import { ArticleSkeleton } from './components/ArticleSkeleton';
@@ -7,6 +7,7 @@ import { ArticleGridItem } from './components/ArticleGridItem';
 import { Toast } from './components/Toast';
 import { PullToRefresh } from './components/PullToRefresh';
 import { isCleanHeadline } from './hooks/useArticleHelpers';
+import { useArtistEpk } from './hooks/useArtistEpk';
 
 function App() {
   const [articles, setArticles] = useState<MusicNewsArticle[]>([]);
@@ -84,7 +85,7 @@ function App() {
         'title', 'summary', 'source', 'source_url', 'primary_genre',
         'secondary_genres', 'artist_names', 'image_source',
         'published_at', 'read_time', 'share_count', 'email_count',
-        'bookmark_count', 'view_count', 'location', 'epk_url', 'epk_status'
+        'bookmark_count', 'view_count', 'location'
       ];
 
       let allDocs: any[] = [];
@@ -150,8 +151,8 @@ function App() {
           viewCount: getField(fields.view_count) || 0,
           isBookmarked: false,
           location: getField(fields.location) || '',
-          epkUrl: getField(fields.epk_url) || '',
-          epkStatus: getField(fields.epk_status) || 'missing',
+          epkUrl: '',
+          epkStatus: 'missing',
         };
       });
 
@@ -183,6 +184,15 @@ function App() {
     fetchArticles(selectedGenre);
   }, [fetchArticles, selectedGenre]);
 
+  // ---------- EPK resolution (RapidConnect) ----------
+
+  // useArtistEpk batch-fetches sm_musicians from PocketBase (published-only)
+  // and builds an in-memory name→EPK index. findEpkInText scans free text
+  // against that index and returns the artist's EPK URL when an article
+  // mentions a published musician. Embedded fallback + localStorage cache
+  // hydrate the index before the PB fetch completes.
+  const { findEpkInText, ready: epkReady } = useArtistEpk();
+
   // ---------- Constants ----------
 
   const genres: { id: Genre; label: string; gradient: string }[] = [
@@ -201,7 +211,22 @@ function App() {
     ? cleanArticles
     : cleanArticles.filter(a => a.primaryGenre === selectedGenre);
 
-  const currentArticle = filteredArticles[currentIndex];
+  // Resolve EPK URLs against the PocketBase-backed artist index. Re-runs
+  // when the PB index hydrates (epkReady flips) without re-fetching
+  // Firestore. findEpkInText scans title + summary for a known published
+  // musician name and returns their EPK URL on rapidconnect.minyvinyl.com.
+  const articlesWithEpk = useMemo(
+    () => filteredArticles.map((a) => {
+      if (a.epkUrl) return a;
+      const text = `${a.title} ${a.summary}`;
+      const url = findEpkInText(text);
+      if (!url) return a;
+      return { ...a, epkUrl: url, epkStatus: 'ready' as const };
+    }),
+    [filteredArticles, findEpkInText, epkReady]
+  );
+
+  const currentArticle = articlesWithEpk[currentIndex];
 
   // ---------- Audio ----------
 
@@ -813,7 +838,7 @@ function App() {
                         className="grid grid-cols-2 lg:grid-cols-1" 
                         style={{ gap: 'clamp(0.5rem, 0.4rem + 0.3vw, 0.875rem)' }}
                       >
-                        {filteredArticles
+                        {articlesWithEpk
                           .filter(a => a.id !== currentArticle?.id && isCleanHeadline(a.title))
                           .slice(0, displayedSidebarCount)
                           .map((article) => (

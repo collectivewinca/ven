@@ -1,5 +1,6 @@
 import { LazyArticleImage } from './LazyArticleImage';
 import type { MusicNewsArticle } from '../types/news';
+import { Music } from 'lucide-react';
 
 interface ArticleGridItemProps {
   article: MusicNewsArticle;
@@ -29,9 +30,20 @@ export function ArticleGridItem({ article, onSelect, isActive }: ArticleGridItem
         <h3 className="text-[0.8rem] font-semibold line-clamp-2 leading-tight text-[var(--text-primary)]">
           {article.title}
         </h3>
-        <p className="text-[0.7rem] text-[var(--text-muted)] truncate mt-1">
-          {article.source}
-        </p>
+        <div className="flex items-center gap-2 mt-1">
+          <p className="text-[0.7rem] text-[var(--text-muted)] truncate">
+            {article.source}
+          </p>
+          {article.epkUrl && (
+            <span
+              className="flex-shrink-0 inline-flex items-center text-cyan-300"
+              aria-label="RapidConnect EPK available"
+              title="RapidConnect EPK available"
+            >
+              <Music className="w-3 h-3" />
+            </span>
+          )}
+        </div>
       </div>
     </button>
   );
