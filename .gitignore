@@ -83,3 +83,6 @@ logs/
 Thumbs.db
 .vercel
 .env*.local
+
+# Codebase Review Swarm artifacts (local only — never commit)
+.swarm/

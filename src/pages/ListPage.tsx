@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ExternalLink, RefreshCw } from 'lucide-react';
+import { ExternalLink, Music, RefreshCw } from 'lucide-react';
 import { useArticles } from '../hooks/useArticles';
+import { useArtistEpk } from '../hooks/useArtistEpk';
 
 const PAGE_SIZE = 25;
 
@@ -17,6 +18,7 @@ function formatDate(value: Date) {
 
 export default function ListPage() {
   const { articles, loading, error, fetchArticles } = useArticles();
+  const { findEpkInText, ready: epkReady } = useArtistEpk();
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
@@ -27,12 +29,25 @@ export default function ListPage() {
     setVisibleCount(PAGE_SIZE);
   }, [articles.length]);
 
-  const visibleArticles = useMemo(
-    () => articles.slice(0, visibleCount),
-    [articles, visibleCount],
+  // Resolve EPK URLs against the PocketBase-backed artist index. Re-runs
+  // when the PB index hydrates (epkReady flips) without re-fetching Firestore.
+  const articlesWithEpk = useMemo(
+    () =>
+      articles.map((a) => {
+        if (a.epkUrl) return a;
+        const url = findEpkInText(`${a.title} ${a.summary}`);
+        if (!url) return a;
+        return { ...a, epkUrl: url, epkStatus: 'ready' as const };
+      }),
+    [articles, findEpkInText, epkReady],
   );
 
-  const canLoadMore = visibleCount < articles.length;
+  const visibleArticles = useMemo(
+    () => articlesWithEpk.slice(0, visibleCount),
+    [articlesWithEpk, visibleCount],
+  );
+
+  const canLoadMore = visibleCount < articlesWithEpk.length;
 
   return (
     <main
@@ -129,7 +144,7 @@ export default function ListPage() {
             <table className="min-w-full border-collapse">
               <thead>
                 <tr style={{ background: 'var(--bg-secondary)' }}>
-                  {['#', 'Date', 'Genre', 'Title', 'Source', 'Summary', 'Link'].map((heading) => (
+                  {['#', 'Date', 'Genre', 'Title', 'Source', 'Summary', 'EPK', 'Link'].map((heading) => (
                     <th
                       key={heading}
                       className="px-4 py-3 text-left text-xs font-bold uppercase tracking-[0.18em]"
@@ -181,6 +196,22 @@ export default function ListPage() {
                       </div>
                     </td>
                     <td className="px-4 py-4 align-top">
+                      {article.epkUrl ? (
+                        <a
+                          href={article.epkUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center text-cyan-300 hover:underline"
+                          aria-label="View artist EPK on RapidConnect"
+                          title="RapidConnect EPK"
+                        >
+                          <Music className="h-4 w-4" />
+                        </a>
+                      ) : (
+                        <span style={{ color: 'var(--text-quaternary)' }}>—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 align-top">
                       <a
                         href={article.sourceUrl}
                         target="_blank"
@@ -198,7 +229,7 @@ export default function ListPage() {
                 {!loading && visibleArticles.length === 0 && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-sm"
                       style={{ color: 'var(--text-secondary)' }}
                     >
@@ -210,7 +241,7 @@ export default function ListPage() {
                 {loading && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-sm"
                       style={{ color: 'var(--text-secondary)' }}
                     >
@@ -222,7 +253,7 @@ export default function ListPage() {
                 {error && !loading && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-4 py-10 text-center text-sm"
                       style={{ color: '#ef4444' }}
                     >
