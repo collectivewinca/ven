@@ -42,12 +42,6 @@ function normalizeName(value: string): string {
     .replace(/\s+/g, ' ');
 }
 
-function getField(fields: Record<string, any>, key: string): string {
-  const val = fields?.[key];
-  if (!val) return '';
-  return val.stringValue || val.integerValue || '';
-}
-
 function buildEpkUrl(identifier: string, shortenedLink?: string): string {
   if (shortenedLink) return shortenedLink;
   return `https://rapidconnect.minyvinyl.com/artists/${identifier}`;

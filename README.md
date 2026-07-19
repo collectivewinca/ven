@@ -28,6 +28,13 @@
 - **Pull to Refresh** — swipe down for fresh content
 - **PWA Ready** — installable on mobile devices
 
+### EPK / RapidConnect Integration
+- **Live EPK Lookup** — article titles + summaries scanned against `sm_musicians` PocketBase collection on `miny-database.exe.xyz`; matches link to artist EPKs at `rapidconnect.minyvinyl.com`
+- **Published-Only Gate** — indexes only records with `content_status='published'` (paired with Subway-Musician EPK quality contract, see PR #9)
+- **Embedded Fallback** — ships a static `artistEpkIndex.json` snapshot; falls back gracefully if the PB filter 400s (pre-field-add window)
+- **Cache** — localStorage key `miny-ven-artist-epk-index-v2` (bumped from v1 to drop stale unfiltered indexes after the published-only gate shipped)
+- **Source**: `src/hooks/useArtistEpk.ts`
+
 ### Music Trends Monitor (music-trends/)
 - **30+ Subreddits** — Music communities across MINY y0's 13 cities
 - **Regional Coverage** — 5 regions: Latin America, Nordic/Europe, Africa/Middle East, Asia, Global/Indie
@@ -290,6 +297,12 @@ Unauthenticated scraper writes are constrained to:
 Authenticated users have full read/write/delete access.
 
 ## Changelog
+
+### 2026-07-19
+- **Fixed (build)**: removed dead `getField` helper in `useArtistEpk.ts` that blocked `tsc -b` (TS6133 unused value) — Vercel production deploy was failing on this since the PR #1 merge
+- **Migrated**: `useArtistEpk` reads live PocketBase `sm_musicians` at `miny-database.exe.xyz` (published-only) instead of the stale `subway-musician-564bd` Firestore April snapshot — paired with Subway-Musician PR #9 (EPK quality contract: sanitized LLM output, name guard, fail-closed generation, repair sweep)
+- **Added**: localStorage cache key bumped to `v2` so stale unfiltered indexes drop on first load after the published-only gate
+- **Deploy**: Vercel production at https://ven.minyvinyl.com (redeploy after build fix)
 
 ### 2026-03-05
 - **Added**: Music Trends Monitoring System (`music-trends/`)
