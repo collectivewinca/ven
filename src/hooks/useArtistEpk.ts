@@ -10,9 +10,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import embeddedFallbackIndex from '../data/artistEpkIndex.json';
 
-const RC_PROJECT_ID = 'subway-musician-564bd';
-const RC_BASE = `https://firestore.googleapis.com/v1/projects/${RC_PROJECT_ID}/databases/(default)/documents/musicians`;
-const LOCAL_CACHE_KEY = 'miny-ven-artist-epk-index-v1';
+// RapidConnect migrated to PocketBase (sm_musicians on miny-database) in
+// 2026-05; the old subway-musician-564bd Firestore is a stale April snapshot.
+// Only quality-contract-passing records (content_status=published) are indexed.
+const PB_BASE = 'https://miny-database.exe.xyz';
+const PB_COLLECTION = 'sm_musicians';
+const LOCAL_CACHE_KEY = 'miny-ven-artist-epk-index-v2';
 
 interface EpkEntry {
   name: string;
@@ -129,38 +132,37 @@ export function useArtistEpk() {
       }
     }
 
-    async function refreshFromFirestore() {
+    async function refreshFromPocketBase() {
       try {
-        const allDocs: any[] = [];
-        let pageToken = '';
+        const allRecords: any[] = [];
+        let page = 1;
 
         while (true) {
           const params = new URLSearchParams();
-          params.set('pageSize', '300');
-          if (pageToken) params.set('pageToken', pageToken);
-          ['name_lw', 'name', 'identifier', 'shortenedLink'].forEach(f =>
-            params.append('mask.fieldPaths', f)
-          );
+          params.set('perPage', '500');
+          params.set('page', String(page));
+          params.set('filter', "content_status = 'published'");
+          params.set('fields', 'id,identifier,name,name_lw,shortenedLink');
 
-          const resp = await fetch(`${RC_BASE}?${params}`);
+          const resp = await fetch(`${PB_BASE}/api/collections/${PB_COLLECTION}/records?${params}`);
           if (!resp.ok) break;
           const data = await resp.json();
-          if (data.documents) allDocs.push(...data.documents);
-          if (!data.nextPageToken) break;
-          pageToken = data.nextPageToken;
+          if (data.items) allRecords.push(...data.items);
+          if (page >= Number(data.totalPages || 1) || !data.items?.length) break;
+          page += 1;
         }
 
         if (cancelled) return;
 
         const nameIndex = new Map<string, EpkEntry>();
-        for (const doc of allDocs) {
-          const fields = doc.fields || {};
-          const nameLw = getField(fields, 'name_lw');
-          const canonicalName = getField(fields, 'name');
-          const identifier = getField(fields, 'identifier');
+        for (const record of allRecords) {
+          const nameLw = record.name_lw || '';
+          const canonicalName = record.name || '';
+          // The live site routes PB record ids (canonical, sitemap-consistent).
+          const identifier = record.id || record.identifier || '';
           if (!identifier) continue;
 
-          const shortenedLink = getField(fields, 'shortenedLink') || undefined;
+          const shortenedLink = record.shortenedLink || undefined;
           const entry: EpkEntry = {
             name: canonicalName || nameLw,
             identifier,
@@ -189,7 +191,7 @@ export function useArtistEpk() {
     }
 
     hydrateCachedIndex().then(() => {
-      refreshFromFirestore();
+      refreshFromPocketBase();
     });
     return () => { cancelled = true; };
   }, []);
