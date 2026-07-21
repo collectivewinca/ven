@@ -91,6 +91,31 @@ function mapPbArticle(record: any): MusicNewsArticle {
 }
 
 /**
+ * Soft-rank sources so generic discovery scrapers (SearXNG / Brave Discovery)
+ * don't dominate the top of a page of mixed PB results. Does not drop rows —
+ * scraper quality is the long-term fix; this is feed UX only.
+ */
+const DISCOVERY_SOURCE_RE = /searxng|brave\s*discovery|duckduckgo/i;
+
+export function sourceRank(source: string): number {
+  if (!source) return 0;
+  if (DISCOVERY_SOURCE_RE.test(source)) return 0;
+  // Known music press / high-signal sources
+  if (/billboard|pitchfork|rolling\s*stone|under the radar|nme|stereogum|consequence|spin|variety|gaffa|line of best fit|metropolis/i.test(source)) {
+    return 2;
+  }
+  return 1;
+}
+
+export function rankArticles(articles: MusicNewsArticle[]): MusicNewsArticle[] {
+  return [...articles].sort((a, b) => {
+    const rankDiff = sourceRank(b.source) - sourceRank(a.source);
+    if (rankDiff !== 0) return rankDiff;
+    return b.publishedAt.getTime() - a.publishedAt.getTime();
+  });
+}
+
+/**
  * Fetch one page of articles from PocketBase.
  * Genre is filtered server-side when not "all".
  */
@@ -121,9 +146,11 @@ export async function fetchArticles(
 
   const data = await response.json();
   const items = Array.isArray(data.items) ? data.items : [];
+  // Rank within the page so discovery noise sinks below press when mixed.
+  const articles = rankArticles(items.map(mapPbArticle));
 
   return {
-    articles: items.map(mapPbArticle),
+    articles,
     totalItems: Number(data.totalItems) || 0,
     totalPages: Number(data.totalPages) || 1,
     page,
