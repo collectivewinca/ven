@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const FIRESTORE_BASE = 'https://firestore.googleapis.com/v1/projects';
-const PROJECT_ID = import.meta.env.VITE_FIREBASE_PROJECT_ID || 'miny-ven';
-
-// Image cache: docId -> image URL (persists across re-renders)
+// Image cache: articleId -> image URL (persists across re-renders)
 const imageCache = new Map<string, string>();
 
 export const genrePlaceholder = (genre?: string) => {
@@ -23,50 +20,38 @@ export const genrePlaceholder = (genre?: string) => {
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 };
 
-export function LazyArticleImage({ articleId, imageSource, primaryGenre, className }: {
+export function LazyArticleImage({ articleId, imageUrl, imageSource, primaryGenre, className }: {
   articleId: string;
+  imageUrl?: string;
   imageSource?: string;
   primaryGenre?: string;
   className?: string;
 }) {
-  const [src, setSrc] = useState<string>(() => imageCache.get(articleId) || '');
-  const [loading, setLoading] = useState(!imageCache.has(articleId));
   const fallback = genrePlaceholder(primaryGenre);
   const logoFallback = '/branding/minylogo.png';
 
+  // Resolve the image source: prefer the article's imageUrl (now fetched
+  // from PocketBase as part of the article record), fall back to the genre
+  // placeholder. Skips unsplash images (legacy low-quality default) and
+  // sources marked 'none'. No per-article Firestore lookup needed anymore.
+  const resolvedSrc = (() => {
+    const cached = imageCache.get(articleId);
+    if (cached) return cached;
+    if (imageUrl && imageUrl.trim() && !imageUrl.includes('images.unsplash.com') && imageSource !== 'none') {
+      imageCache.set(articleId, imageUrl.trim());
+      return imageUrl.trim();
+    }
+    imageCache.set(articleId, fallback);
+    return fallback;
+  })();
+
+  const [src, setSrc] = useState(resolvedSrc);
+  const [loading, setLoading] = useState(!resolvedSrc);
+
   useEffect(() => {
-    if (imageCache.has(articleId)) {
-      setSrc(imageCache.get(articleId)!);
-      setLoading(false);
-      return;
-    }
-    if (!imageSource || imageSource === 'none') {
-      setSrc(fallback);
-      setLoading(false);
-      imageCache.set(articleId, fallback);
-      return;
-    }
-    let cancelled = false;
-    const apiKey = import.meta.env.VITE_FIREBASE_API_KEY;
-    const params = new URLSearchParams();
-    if (apiKey) params.set('key', apiKey);
-    params.append('mask.fieldPaths', 'image_url');
-    const url = `${FIRESTORE_BASE}/${PROJECT_ID}/databases/(default)/documents/articles/${articleId}?${params}`;
-    fetch(url).then(r => r.json()).then(doc => {
-      if (cancelled) return;
-      const raw = doc?.fields?.image_url?.stringValue?.trim() || '';
-      const resolved = (raw && !raw.includes('images.unsplash.com')) ? raw : fallback;
-      imageCache.set(articleId, resolved);
-      setSrc(resolved);
-      setLoading(false);
-    }).catch(() => {
-      if (!cancelled) {
-        setSrc(fallback);
-        setLoading(false);
-      }
-    });
-    return () => { cancelled = true; };
-  }, [articleId, imageSource]);
+    setSrc(resolvedSrc);
+    setLoading(false);
+  }, [resolvedSrc]);
 
   if (loading) {
     return <div className={`${className} animate-pulse`} style={{ background: 'var(--skeleton-base)' }} />;

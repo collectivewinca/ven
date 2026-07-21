@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import type { MusicNewsArticle, Genre } from '../types/news';
-import { fetchArticlesFromFirestore } from '../utils/firestore';
+import { fetchArticles as fetchArticlesFromPb } from '../utils/articles';
 
 export function useArticles() {
   const [articles, setArticles] = useState<MusicNewsArticle[]>([]);
@@ -13,7 +13,7 @@ export function useArticles() {
     setError(null);
 
     try {
-      const result = await fetchArticlesFromFirestore(genre);
+      const result = await fetchArticlesFromPb(genre);
       setArticles(result);
     } catch (err: any) {
       console.error('Error fetching articles:', err);

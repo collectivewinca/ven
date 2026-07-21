@@ -8,7 +8,7 @@ import { Toast } from './components/Toast';
 import { PullToRefresh } from './components/PullToRefresh';
 import { isCleanHeadline } from './hooks/useArticleHelpers';
 import { useArtistEpk } from './hooks/useArtistEpk';
-import { fetchArticlesFromFirestore } from './utils/firestore';
+import { fetchArticles as fetchArticlesFromPb } from './utils/articles';
 
 function App() {
   const [articles, setArticles] = useState<MusicNewsArticle[]>([]);
@@ -78,7 +78,7 @@ function App() {
     setArticles([]);
 
     try {
-      const filtered = await fetchArticlesFromFirestore(genre);
+      const filtered = await fetchArticlesFromPb(genre);
       setArticles(filtered);
       console.log(`Loaded ${filtered.length} articles from REST API`);
 

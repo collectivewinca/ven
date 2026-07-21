@@ -124,6 +124,7 @@ export function ArticleCard({
       <div className="relative aspect-video w-full overflow-hidden rounded-t-2xl">
         <LazyArticleImage
           articleId={article.id}
+          imageUrl={article.imageUrl}
           imageSource={article.imageSource}
           primaryGenre={article.primaryGenre}
           className="w-full h-full object-cover"
@@ -146,7 +147,7 @@ export function ArticleCard({
         <div className="flex items-center gap-1 pt-2">
           <button
             onClick={() => toggleBookmark(article.id)}
-            className={`p-2 rounded-full hover:bg-white/20 transition-colors ${isBookmarked ? 'text-yellow-400' : 'text-green-400'}`}
+            className={`p-2.5 rounded-full hover:bg-white/20 transition-colors ${isBookmarked ? 'text-yellow-400' : 'text-green-400'}`}
             aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
           >
             <Bookmark className={`w-5 h-5 ${isBookmarked ? 'fill-current' : ''}`} />
@@ -154,7 +155,7 @@ export function ArticleCard({
 
           <button
             onClick={handleShare}
-            className="p-2 rounded-full hover:bg-white/20 transition-colors text-green-400"
+            className="p-2.5 rounded-full hover:bg-white/20 transition-colors text-green-400"
             aria-label="Share article"
           >
             <Share2 className="w-5 h-5" />
@@ -167,7 +168,7 @@ export function ArticleCard({
               href={article.epkUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="p-2 rounded-full hover:bg-white/20 transition-colors text-cyan-300"
+              className="p-2.5 rounded-full hover:bg-white/20 transition-colors text-cyan-300"
               aria-label="View artist EPK on RapidConnect"
               title="RapidConnect EPK"
             >
@@ -179,7 +180,7 @@ export function ArticleCard({
             href={article.sourceUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="p-2 rounded-full hover:bg-white/20 transition-colors text-green-400 ml-auto"
+            className="p-2.5 rounded-full hover:bg-white/20 transition-colors text-green-400 ml-auto"
             aria-label="Open original article"
           >
             <ExternalLink className="w-5 h-5" />

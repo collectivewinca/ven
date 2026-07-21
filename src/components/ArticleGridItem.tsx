@@ -21,6 +21,7 @@ export function ArticleGridItem({ article, onSelect, isActive }: ArticleGridItem
       <div className="flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden bg-[var(--skeleton-base)]">
         <LazyArticleImage
           articleId={article.id}
+          imageUrl={article.imageUrl}
           imageSource={article.imageSource}
           primaryGenre={article.primaryGenre}
           className="w-20 h-20 object-cover"
