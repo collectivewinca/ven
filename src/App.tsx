@@ -8,7 +8,7 @@ import { Toast } from './components/Toast';
 import { PullToRefresh } from './components/PullToRefresh';
 import { isCleanHeadline } from './hooks/useArticleHelpers';
 import { useArtistEpk } from './hooks/useArtistEpk';
-import { fetchArticles as fetchArticlesFromPb } from './utils/articles';
+import { fetchArticles as fetchArticlesFromPb, HOME_PAGE_SIZE } from './utils/articles';
 
 function App() {
   const [articles, setArticles] = useState<MusicNewsArticle[]>([]);
@@ -70,33 +70,52 @@ function App() {
   const audioContextRef = useRef<AudioContext | null>(null);
   const bedNodesRef = useRef<{ oscillators: OscillatorNode[]; gain: GainNode } | null>(null);
   const wheelLockRef = useRef(false);
+  const fetchAbortRef = useRef<AbortController | null>(null);
 
   // ---------- Data fetching ----------
+  // One bounded PB page only (HOME_PAGE_SIZE). Full-corpus pagination was a
+  // production failure (dozens of 500-row requests → net::ERR_FAILED).
 
   const fetchArticles = useCallback(async (genre: Genre = 'all') => {
+    fetchAbortRef.current?.abort();
+    const ac = new AbortController();
+    fetchAbortRef.current = ac;
+
     setLoading(true);
-    setArticles([]);
+    // Keep last good articles until the new page arrives (no empty flash).
 
     try {
-      const filtered = await fetchArticlesFromPb(genre);
-      setArticles(filtered);
-      console.log(`Loaded ${filtered.length} articles from REST API`);
+      const result = await fetchArticlesFromPb(genre, {
+        page: 1,
+        perPage: HOME_PAGE_SIZE,
+        signal: ac.signal,
+      });
+      if (ac.signal.aborted) return;
 
-      if (filtered.length === 0) {
+      setArticles(result.articles);
+      setCurrentIndex(0);
+      console.log(
+        `Loaded ${result.articles.length} articles from PocketBase (page ${result.page}/${result.totalPages}, total ${result.totalItems})`,
+      );
+
+      if (result.articles.length === 0) {
         setToast('No articles found for this genre.');
       }
     } catch (error: any) {
+      if (error?.name === 'AbortError') return;
       console.error('Error fetching articles:', error);
       console.error('Error message:', error.message);
-      setArticles([]);
-      setToast(`Error: ${error.message || 'Failed to load articles'}`);
+      setToast(`Error: ${error.message || 'Failed to load articles from PocketBase'}`);
     } finally {
-      setLoading(false);
+      if (!ac.signal.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchArticles(selectedGenre);
+    return () => {
+      fetchAbortRef.current?.abort();
+    };
   }, [fetchArticles, selectedGenre]);
 
   // ---------- EPK resolution (RapidConnect) ----------
@@ -524,7 +543,9 @@ function App() {
         <div className="text-center px-4">
           <Music className="w-16 h-16 mx-auto mb-6" style={{ color: 'var(--text-faint)' }} />
           <p className="font-display text-lg font-bold mb-2" style={{ color: 'var(--text-tertiary)' }}>No articles found</p>
-          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>Run the scraper to populate Firebase with content</p>
+          <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+            No articles loaded from PocketBase. Check the feed source or retry.
+          </p>
           <button
             onClick={() => fetchArticles(selectedGenre)}
             className="mt-8 px-7 py-3 rounded-full transition-all font-medium text-sm tracking-wide"

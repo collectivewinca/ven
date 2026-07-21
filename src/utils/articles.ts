@@ -1,20 +1,23 @@
 import type { MusicNewsArticle, Genre } from '../types/news';
 
-// Articles migrated from Firestore to PocketBase (miny-database.exe.xyz) in
-// 2026-05. The old miny-ven Firestore project is a stale April snapshot
-// (last article 2026-04-28) and is no longer written to. PB is the source of
-// truth (46k+ articles, curated/curator/entity fields Firestore lacked).
+// Articles read from PocketBase (miny-database.exe.xyz). Firebase/Firestore
+// was removed 2026-07 — PB is the source of truth (~47k+ articles).
 //
-// sm_musicians (EPK source) lives on the same PB instance — see useArtistEpk.
+// IMPORTANT: never walk every PB page into the browser. Callers must pass
+// page/perPage and load more on demand. Full-corpus client pagination
+// (~95 × 500) was a production failure mode (net::ERR_FAILED mid-fetch).
 
 const PB_BASE = 'https://miny-database.exe.xyz';
 const PB_COLLECTION = 'articles';
 
-// Fields requested from PocketBase. Keeps the payload small by excluding
-// heavy fields (full_content) unless needed. EPK URLs are resolved
-// client-side via useArtistEpk, NOT read from PB epk_url/epk_status (those
-// fields exist on PB records but are stubs — the real EPK lookup scans
-// article text against the sm_musicians index).
+/** Default first-window size for the card feed (home). */
+export const HOME_PAGE_SIZE = 80;
+
+/** Default page size for the directory table (/list). */
+export const LIST_PAGE_SIZE = 25;
+
+// Fields requested from PocketBase. Keep payload small — no full_content.
+// curated/curator/entity_rc_url intentionally omitted until UI uses them.
 const ARTICLE_FIELDS = [
   'id',
   'title',
@@ -33,10 +36,34 @@ const ARTICLE_FIELDS = [
   'bookmark_count',
   'view_count',
   'location',
-  'curated',
-  'curator',
-  'entity_rc_url',
 ];
+
+export type FetchArticlesOptions = {
+  page?: number;
+  perPage?: number;
+  signal?: AbortSignal;
+};
+
+export type FetchArticlesResult = {
+  articles: MusicNewsArticle[];
+  totalItems: number;
+  totalPages: number;
+  page: number;
+  perPage: number;
+};
+
+/** Normalize PB date strings like "2026-04-28 17:00:00.000Z" for Safari. */
+function parsePbDate(value: unknown): Date {
+  if (value == null || value === '') return new Date(0);
+  const raw = String(value);
+  const normalized = raw.includes('T') ? raw : raw.replace(' ', 'T');
+  const d = new Date(normalized);
+  return Number.isNaN(d.getTime()) ? new Date(0) : d;
+}
+
+function asStringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.map(String) : [];
+}
 
 function mapPbArticle(record: any): MusicNewsArticle {
   return {
@@ -46,11 +73,11 @@ function mapPbArticle(record: any): MusicNewsArticle {
     source: record.source || '',
     sourceUrl: record.source_url || '',
     primaryGenre: record.primary_genre || '',
-    secondaryGenres: record.secondary_genres || [],
-    artistNames: record.artist_names || [],
+    secondaryGenres: asStringArray(record.secondary_genres),
+    artistNames: asStringArray(record.artist_names),
     imageUrl: record.image_url || '',
     imageSource: record.image_source || '',
-    publishedAt: new Date(record.published_at || Date.now()),
+    publishedAt: parsePbDate(record.published_at),
     readTime: record.read_time || 60,
     shareCount: record.share_count || 0,
     emailCount: record.email_count || 0,
@@ -63,32 +90,43 @@ function mapPbArticle(record: any): MusicNewsArticle {
   };
 }
 
-export async function fetchArticles(genre: Genre = 'all'): Promise<MusicNewsArticle[]> {
-  const allRecords: any[] = [];
-  let page = 1;
+/**
+ * Fetch one page of articles from PocketBase.
+ * Genre is filtered server-side when not "all".
+ */
+export async function fetchArticles(
+  genre: Genre = 'all',
+  opts: FetchArticlesOptions = {},
+): Promise<FetchArticlesResult> {
+  const page = Math.max(1, opts.page ?? 1);
+  const perPage = Math.min(500, Math.max(1, opts.perPage ?? HOME_PAGE_SIZE));
 
-  while (true) {
-    const params = new URLSearchParams();
-    params.set('perPage', '500');
-    params.set('page', String(page));
-    params.set('fields', ARTICLE_FIELDS.join(','));
-    // Sort by published_at descending — PB supports the sort param.
-    params.set('sort', '-published_at');
+  const params = new URLSearchParams();
+  params.set('perPage', String(perPage));
+  params.set('page', String(page));
+  params.set('fields', ARTICLE_FIELDS.join(','));
+  params.set('sort', '-published_at');
 
-    const url = `${PB_BASE}/api/collections/${PB_COLLECTION}/records?${params}`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-    const data = await response.json();
-    if (data.items) allRecords.push(...data.items);
-    if (page >= Number(data.totalPages || 1) || !data.items?.length) break;
-    page += 1;
+  if (genre !== 'all') {
+    // PocketBase filter: match primary_genre exactly (same as prior client filter).
+    const safe = String(genre).replace(/"/g, '\\"');
+    params.set('filter', `primary_genre = "${safe}"`);
   }
 
-  const fetchedArticles: MusicNewsArticle[] = allRecords.map(mapPbArticle);
+  const url = `${PB_BASE}/api/collections/${PB_COLLECTION}/records?${params}`;
+  const response = await fetch(url, { signal: opts.signal });
+  if (!response.ok) {
+    throw new Error(`HTTP error! status: ${response.status}`);
+  }
 
-  return genre === 'all'
-    ? fetchedArticles
-    : fetchedArticles.filter((a) => a.primaryGenre === genre);
+  const data = await response.json();
+  const items = Array.isArray(data.items) ? data.items : [];
+
+  return {
+    articles: items.map(mapPbArticle),
+    totalItems: Number(data.totalItems) || 0,
+    totalPages: Number(data.totalPages) || 1,
+    page,
+    perPage,
+  };
 }

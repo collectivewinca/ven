@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { ExternalLink, Music, RefreshCw } from 'lucide-react';
 import { useArticles } from '../hooks/useArticles';
 import { useArtistEpk } from '../hooks/useArtistEpk';
-
-const PAGE_SIZE = 25;
+import { LIST_PAGE_SIZE } from '../utils/articles';
 
 function formatDate(value: Date) {
-  if (Number.isNaN(value.getTime())) return 'Unknown';
+  if (Number.isNaN(value.getTime()) || value.getTime() === 0) return 'Unknown';
 
   return value.toLocaleDateString('en-US', {
     month: 'short',
@@ -17,20 +16,24 @@ function formatDate(value: Date) {
 }
 
 export default function ListPage() {
-  const { articles, loading, error, fetchArticles } = useArticles();
+  const {
+    articles,
+    loading,
+    loadingMore,
+    error,
+    totalItems,
+    canLoadMore,
+    fetchArticles,
+    loadMore,
+  } = useArticles();
   const { findEpkInText, ready: epkReady } = useArtistEpk();
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   useEffect(() => {
     fetchArticles('all');
   }, [fetchArticles]);
 
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [articles.length]);
-
   // Resolve EPK URLs against the PocketBase-backed artist index. Re-runs
-  // when the PB index hydrates (epkReady flips) without re-fetching Firestore.
+  // when the PB index hydrates (epkReady flips).
   const articlesWithEpk = useMemo(
     () =>
       articles.map((a) => {
@@ -41,13 +44,6 @@ export default function ListPage() {
       }),
     [articles, findEpkInText, epkReady],
   );
-
-  const visibleArticles = useMemo(
-    () => articlesWithEpk.slice(0, visibleCount),
-    [articlesWithEpk, visibleCount],
-  );
-
-  const canLoadMore = visibleCount < articlesWithEpk.length;
 
   return (
     <main
@@ -84,7 +80,7 @@ export default function ListPage() {
                 className="mt-3 max-w-2xl text-sm sm:text-base"
                 style={{ color: 'var(--text-secondary)' }}
               >
-                Browse the full feed in batches of 25, then load more when you want the next set.
+                Browse the feed in batches of {LIST_PAGE_SIZE} from PocketBase, then load more when you want the next set.
               </p>
             </div>
 
@@ -121,13 +117,15 @@ export default function ListPage() {
               className="rounded-full px-3 py-1 font-medium"
               style={{ background: 'var(--action-bg)', color: 'var(--text-secondary)' }}
             >
-              {loading ? 'Loading articles...' : `${articles.length} total articles`}
+              {loading && articles.length === 0
+                ? 'Loading articles...'
+                : `${totalItems.toLocaleString()} total in PocketBase`}
             </span>
             <span
               className="rounded-full px-3 py-1 font-medium"
               style={{ background: 'var(--action-bg)', color: 'var(--text-secondary)' }}
             >
-              Showing {Math.min(visibleCount, articles.length)} at a time
+              Showing {articlesWithEpk.length} loaded
             </span>
           </div>
         </div>
@@ -159,7 +157,7 @@ export default function ListPage() {
                 </tr>
               </thead>
               <tbody>
-                {visibleArticles.map((article, index) => (
+                {articlesWithEpk.map((article, index) => (
                   <tr
                     key={article.id}
                     style={{
@@ -226,7 +224,7 @@ export default function ListPage() {
                   </tr>
                 ))}
 
-                {!loading && visibleArticles.length === 0 && (
+                {!loading && articlesWithEpk.length === 0 && (
                   <tr>
                     <td
                       colSpan={8}
@@ -238,7 +236,7 @@ export default function ListPage() {
                   </tr>
                 )}
 
-                {loading && (
+                {loading && articlesWithEpk.length === 0 && (
                   <tr>
                     <td
                       colSpan={8}
@@ -266,19 +264,20 @@ export default function ListPage() {
           </div>
         </div>
 
-        {canLoadMore && !loading && (
+        {canLoadMore && (
           <div className="flex justify-center py-6">
             <button
               type="button"
-              onClick={() => setVisibleCount((current) => current + PAGE_SIZE)}
-              className="rounded-full px-6 py-3 text-sm font-semibold transition"
+              onClick={() => loadMore()}
+              disabled={loadingMore}
+              className="rounded-full px-6 py-3 text-sm font-semibold transition disabled:opacity-60"
               style={{
                 background: 'var(--text-primary)',
                 color: 'var(--bg-primary)',
                 boxShadow: 'var(--shadow-card)',
               }}
             >
-              Load 25 more
+              {loadingMore ? 'Loading…' : `Load ${LIST_PAGE_SIZE} more`}
             </button>
           </div>
         )}

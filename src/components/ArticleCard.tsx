@@ -77,11 +77,12 @@ export function ArticleCard({
   const isArticleAudioLoading = audioLoading && audioArticleId === article.id;
 
   const renderAudioButton = () => {
+    // p-2.5 + w-5 h-5 icon = 40×40 touch target (matches bookmark/share/EPK)
     if (isArticleAudioLoading) {
       return (
         <button
           onClick={handleListen}
-          className="p-2 rounded-full hover:bg-white/20 transition-colors text-green-400"
+          className="p-2.5 rounded-full hover:bg-white/20 transition-colors text-green-400"
           aria-label="Loading audio"
         >
           <RefreshCw className="w-5 h-5 animate-spin" />
@@ -92,7 +93,7 @@ export function ArticleCard({
       return (
         <button
           onClick={handleListen}
-          className="p-2 rounded-full hover:bg-white/20 transition-colors text-green-400"
+          className="p-2.5 rounded-full hover:bg-white/20 transition-colors text-green-400"
           aria-label="Pause audio"
         >
           <Pause className="w-5 h-5" />
@@ -102,7 +103,7 @@ export function ArticleCard({
     return (
       <button
         onClick={handleListen}
-        className="p-2 rounded-full hover:bg-white/20 transition-colors text-green-400"
+        className="p-2.5 rounded-full hover:bg-white/20 transition-colors text-green-400"
         aria-label="Listen to article"
       >
         <Volume2 className="w-5 h-5" />
