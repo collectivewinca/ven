@@ -1,0 +1,39 @@
+# Music / indie domain allowlist for open-web discovery writers (phase 1).
+# Fail-closed if this file is empty when allowlist is enforced.
+# One hostname per line (no scheme). Subdomains match if suffix equals entry.
+
+pitchfork.com
+billboard.com
+nme.com
+rollingstone.com
+stereogum.com
+consequence.net
+spin.com
+variety.com
+undertheradarmag.com
+thequietus.com
+obscuresound.com
+bandcamp.com
+daily.bandcamp.com
+metropolis.co.jp
+gaffa.dk
+thelineofbestfit.com
+allmusic.com
+residentadvisor.net
+mixmag.net
+djmag.com
+factmag.com
+xlr8r.com
+ra.co
+complex.com
+hotnewhiphop.com
+hiphopdx.com
+genius.com
+youtube.com
+youtu.be
+soundcloud.com
+spotify.com
+open.spotify.com
+tidal.com
+music.apple.com
+reddit.com

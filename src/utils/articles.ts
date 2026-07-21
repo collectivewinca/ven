@@ -17,7 +17,6 @@ export const HOME_PAGE_SIZE = 80;
 export const LIST_PAGE_SIZE = 25;
 
 // Fields requested from PocketBase. Keep payload small — no full_content.
-// curated/curator/entity_rc_url intentionally omitted until UI uses them.
 const ARTICLE_FIELDS = [
   'id',
   'title',
@@ -36,6 +35,7 @@ const ARTICLE_FIELDS = [
   'bookmark_count',
   'view_count',
   'location',
+  'curated',
 ];
 
 export type FetchArticlesOptions = {
@@ -87,32 +87,77 @@ function mapPbArticle(record: any): MusicNewsArticle {
     location: record.location || '',
     epkUrl: '',
     epkStatus: 'missing',
+    curated: Boolean(record.curated),
   };
 }
 
 /**
- * Soft-rank sources so generic discovery scrapers (SearXNG / Brave Discovery)
- * don't dominate the top of a page of mixed PB results. Does not drop rows —
- * scraper quality is the long-term fix; this is feed UX only.
+ * Indie-discovery-first ranking (phase 1):
+ * curated > specialty/community > generic music > major wire > discovery noise.
+ * Majors are demoted (not banned). Discovery noise sinks last.
  */
-const DISCOVERY_SOURCE_RE = /searxng|brave\s*discovery|duckduckgo/i;
+const DISCOVERY_SOURCE_RE = /searxng|brave\s*discovery|duckduckgo|ddgs/i;
+const MAJOR_WIRE_RE =
+  /billboard|nme|rolling\s*stone|rollingstone|variety|spin(?!\s*magazine)/i;
+const SPECIALTY_RE =
+  /under the radar|obscure sound|quietus|stereogum|consequence|gaffa|line of best fit|metropolis|pitchfork|bandcamp|parapop|r\//i;
 
-export function sourceRank(source: string): number {
-  if (!source) return 0;
+export function isMajorWireSource(source: string): boolean {
+  return MAJOR_WIRE_RE.test(source || '');
+}
+
+export function isDiscoveryNoiseSource(source: string): boolean {
+  return DISCOVERY_SOURCE_RE.test(source || '');
+}
+
+export function sourceRank(source: string, curated?: boolean): number {
+  if (curated) return 5;
+  if (!source) return 1;
   if (DISCOVERY_SOURCE_RE.test(source)) return 0;
-  // Known music press / high-signal sources
-  if (/billboard|pitchfork|rolling\s*stone|under the radar|nme|stereogum|consequence|spin|variety|gaffa|line of best fit|metropolis/i.test(source)) {
-    return 2;
-  }
-  return 1;
+  if (SPECIALTY_RE.test(source)) return 4;
+  if (MAJOR_WIRE_RE.test(source)) return 1;
+  return 3;
 }
 
 export function rankArticles(articles: MusicNewsArticle[]): MusicNewsArticle[] {
   return [...articles].sort((a, b) => {
-    const rankDiff = sourceRank(b.source) - sourceRank(a.source);
+    const rankDiff = sourceRank(b.source, b.curated) - sourceRank(a.source, a.curated);
     if (rankDiff !== 0) return rankDiff;
     return b.publishedAt.getTime() - a.publishedAt.getTime();
   });
+}
+
+/** First-screen major cap: ≤ maxMajors uncurated major-wire rows in first `windowSize`. */
+export function applyMajorCap(
+  articles: MusicNewsArticle[],
+  opts: { windowSize?: number; maxMajors?: number } = {},
+): MusicNewsArticle[] {
+  const windowSize = opts.windowSize ?? 25;
+  const maxMajors = opts.maxMajors ?? 2;
+  const head: MusicNewsArticle[] = [];
+  const tail: MusicNewsArticle[] = [];
+  let majorsInHead = 0;
+
+  for (const a of articles) {
+    const isMajor = isMajorWireSource(a.source) && !a.curated;
+    if (head.length < windowSize) {
+      if (isMajor && majorsInHead >= maxMajors) {
+        tail.push(a);
+      } else {
+        if (isMajor) majorsInHead += 1;
+        head.push(a);
+      }
+    } else {
+      tail.push(a);
+    }
+  }
+  return [...head, ...tail];
+}
+
+/** Public feed presentation: drop discovery noise labels, rank, major-cap. */
+export function presentFeedArticles(articles: MusicNewsArticle[]): MusicNewsArticle[] {
+  const withoutNoise = articles.filter((a) => !isDiscoveryNoiseSource(a.source) || a.curated);
+  return applyMajorCap(rankArticles(withoutNoise));
 }
 
 /**
@@ -146,8 +191,8 @@ export async function fetchArticles(
 
   const data = await response.json();
   const items = Array.isArray(data.items) ? data.items : [];
-  // Rank within the page so discovery noise sinks below press when mixed.
-  const articles = rankArticles(items.map(mapPbArticle));
+  // Indie-first presentation: filter discovery noise labels, demote majors, cap first screen.
+  const articles = presentFeedArticles(items.map(mapPbArticle));
 
   return {
     articles,

@@ -19,6 +19,8 @@ export interface MusicNewsArticle {
   location?: string;
   epkUrl?: string;
   epkStatus?: 'ready' | 'pending' | 'missing';
+  /** PocketBase curated flag — majors may surface when true */
+  curated?: boolean;
 }
 
 export type Genre = 'gospel' | 'hiphop' | 'pop' | 'rock' | 'electronic' | 'tech' | 'all';

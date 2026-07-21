@@ -1229,12 +1229,17 @@ Headline:"""
     }
 
     def is_music_relevant(self, title: str, content: str, source_genre: str) -> bool:
-        """Gate: reject articles with no music relevance."""
-        # Trusted RSS sources (pitchfork, billboard, etc.) are always relevant
-        if source_genre in ("gospel", "mixed"):
-            return True
-        text = (title + " " + content).lower()
-        return any(kw in text for kw in self.MUSIC_RELEVANCE_KEYWORDS)
+        """Gate: reject articles with no music relevance (shared classifier)."""
+        try:
+            from music_classifier import is_music_relevant as _shared_music
+        except ImportError:
+            from scraper.music_classifier import is_music_relevant as _shared_music  # type: ignore
+        return _shared_music(
+            title,
+            content or "",
+            source_genre=source_genre or "",
+            source="",
+        )
 
     def classify_genre(self, title: str, content: str, source_genre: str) -> tuple:
         """Classify article genre based on content"""
