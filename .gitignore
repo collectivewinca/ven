@@ -86,3 +86,7 @@ Thumbs.db
 
 # Codebase Review Swarm artifacts (local only — never commit)
 .swarm/
+
+# Article cleanup archives (may contain full PB dumps)
+archives/
+

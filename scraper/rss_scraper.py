@@ -1241,6 +1241,33 @@ Headline:"""
             source="",
         )
 
+    def discovery_may_ingest(
+        self,
+        title: str,
+        content: str,
+        source_url: str,
+        *,
+        source: str = "",
+        source_genre: str = "discovery",
+    ) -> bool:
+        """Open-web discovery gate: music classifier + domain allowlist (fail-closed)."""
+        try:
+            from discovery_allowlist import discovery_may_save
+        except ImportError:
+            try:
+                from scraper.discovery_allowlist import discovery_may_save  # type: ignore
+            except ImportError:
+                # Fail closed if allowlist module missing
+                print("  ⛔ discovery_allowlist unavailable — blocking discovery save")
+                return False
+        return discovery_may_save(
+            title,
+            content or "",
+            source_url or "",
+            source=source,
+            source_genre=source_genre,
+        )
+
     def classify_genre(self, title: str, content: str, source_genre: str) -> tuple:
         """Classify article genre based on content"""
         text = (title + " " + content).lower()
@@ -1830,8 +1857,13 @@ Headline:"""
                     duplicates += 1
                     continue
 
-                if not self.is_music_relevant(original_title, content, "discovery"):
-                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
+                if not self.discovery_may_ingest(
+                    original_title,
+                    content,
+                    item.get("link", ""),
+                    source="Discovery",
+                ):
+                    print(f"  ⛔ Discovery rejected: {original_title[:60]}...")
                     continue
 
                 artists = self.extract_artists(original_title, content)
@@ -1964,7 +1996,13 @@ Headline:"""
                     duplicates += 1
                     continue
 
-                if not self.is_music_relevant(original_title, content, "discovery"):
+                if not self.discovery_may_ingest(
+                    original_title,
+                    content,
+                    item.get("link", ""),
+                    source="Discovery",
+                ):
+                    print(f"  ⛔ Discovery rejected: {original_title[:60]}...")
                     continue
 
                 artists = self.extract_artists(original_title, content)
@@ -2205,8 +2243,13 @@ Headline:"""
                     duplicates += 1
                     continue
 
-                if not self.is_music_relevant(original_title, content, "discovery"):
-                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
+                if not self.discovery_may_ingest(
+                    original_title,
+                    content,
+                    item.get("link", ""),
+                    source="Discovery",
+                ):
+                    print(f"  ⛔ Discovery rejected: {original_title[:60]}...")
                     continue
 
                 artists = self.extract_artists(original_title, content)
@@ -2480,8 +2523,13 @@ Headline:"""
                     duplicates += 1
                     continue
 
-                if not self.is_music_relevant(original_title, content, "discovery"):
-                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
+                if not self.discovery_may_ingest(
+                    original_title,
+                    content,
+                    item.get("link", ""),
+                    source="Discovery",
+                ):
+                    print(f"  ⛔ Discovery rejected: {original_title[:60]}...")
                     continue
 
                 artists = self.extract_artists(original_title, content)
@@ -2584,8 +2632,13 @@ Headline:"""
                     duplicates += 1
                     continue
 
-                if not self.is_music_relevant(original_title, content, "discovery"):
-                    print(f"  ⛔ Not music-relevant: {original_title[:60]}...")
+                if not self.discovery_may_ingest(
+                    original_title,
+                    content,
+                    item.get("link", ""),
+                    source="Discovery",
+                ):
+                    print(f"  ⛔ Discovery rejected: {original_title[:60]}...")
                     continue
 
                 artists = self.extract_artists(original_title, content)
